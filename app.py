@@ -13,7 +13,7 @@ from email.utils import parsedate_to_datetime
 #  CONFIGURACIÓN
 # ══════════════════════════════════════════════════════════════════════════════
 
-st.set_page_config(page_title="1091 | Centro de Monitoreo", layout="wide")
+st.set_page_config(page_title="Centro de Monitoreo", layout="wide")
 st.markdown("""<style>
 .stApp {background-color: #0e0e10; color: #E0E0E0;}
 h1, h2, h3 {color: #FFFFFF !important;}
