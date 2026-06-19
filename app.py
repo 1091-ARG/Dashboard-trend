@@ -407,4 +407,3 @@ echo "ok — $(wc -l < /tmp/app_final.py) líneas"
 python3 -c "import ast; ast.parse(open('/tmp/app_final.py').read()); print('Sintaxis válida ✓')"
 Salida
 
-ok — 403 líneas
