@@ -2,3 +2,5 @@ streamlit
 feedparser
 pandas
 anthropic
+requests
+plotly
