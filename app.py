@@ -1,4 +1,3 @@
-cat << 'PYEOF' > /tmp/app_final.py
 import streamlit as st
 import feedparser
 import pandas as pd
@@ -402,8 +401,3 @@ with tab6:
     st.divider()
     st.info("""**Para los envíos automáticos (8:30, 12:30 y 18:00):**
 Streamlit Cloud no puede correr tareas solo en horarios fijos. Para eso se usa un servicio externo gratuito (GitHub Actions o cron-job.org) que abre el digest a esas horas. Lo dejamos configurado en la próxima sesión — el código ya está listo para recibirlo.""")
-PYEOF
-echo "ok — $(wc -l < /tmp/app_final.py) líneas"
-python3 -c "import ast; ast.parse(open('/tmp/app_final.py').read()); print('Sintaxis válida ✓')"
-Salida
-
