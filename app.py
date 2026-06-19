@@ -1,4 +1,16 @@
+import anthropic
+import os
 
+# Conexión segura a la API
+client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+
+def pedir_a_claude(prompt):
+    message = client.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return message.content[0].text
 import streamlit as st
 import feedparser
 import pandas as pd
