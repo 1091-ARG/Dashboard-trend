@@ -15,9 +15,9 @@ from email.utils import parsedate_to_datetime
 
 st.set_page_config(page_title="Centro de Monitoreo", layout="wide", initial_sidebar_state="expanded")
 
-# Base de datos temporal para el Laboratorio de Audiencias
+# Base de datos temporal robusta (Lista de diccionarios para evitar errores de Pandas)
 if 'db_rendimiento' not in st.session_state:
-    st.session_state['db_rendimiento'] = pd.DataFrame(columns=["Perfil", "Tema/Texto", "Impresiones", "Interacciones", "Engagement (%)"])
+    st.session_state['db_rendimiento'] = []
 
 st.markdown("""
 <style>
@@ -53,11 +53,11 @@ except:
 try:
     GMAIL_USER = st.secrets["GMAIL_USER"]
     GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
-    MAIL_DESTINO = st.secrets.get("MAIL_DESTINO", "matumontanez@gmail.com")
+    MAIL_DESTINO = st.secrets.get("MAIL_DESTINO", "correo@ejemplo.com")
 except:
     GMAIL_USER = ""
     GMAIL_APP_PASSWORD = ""
-    MAIL_DESTINO = "matumontanez@gmail.com"
+    MAIL_DESTINO = "correo@ejemplo.com"
 
 PALABRAS_CLAVE = ["jubilados", "femicidio", "terremoto", "tragedia", "muerte", "protesta", "corrupción", "paro", "represión", "escándalo", "inundación"]
 CUTOFF_HORAS = 24
@@ -137,6 +137,17 @@ def enviar_mail(asunto, cuerpo_html):
         return True, "Mail enviado correctamente."
     except Exception as e: return False, str(e)
 
+def extraer_json_seguro(texto):
+    """Extrae el JSON de la respuesta de Claude de forma segura para evitar crashes."""
+    try:
+        start = texto.find("{")
+        end = texto.rfind("}")
+        if start != -1 and end != -1:
+            return json.loads(texto[start:end+1])
+    except Exception:
+        pass
+    return None
+
 def ia_curar_regional(noticias_lista, contexto_region, top=TOP_NOTICIAS):
     if not ANTHROPIC_API_KEY: return None, "Falta API key de Anthropic."
     if not noticias_lista: return [], None
@@ -149,13 +160,11 @@ def ia_curar_regional(noticias_lista, contexto_region, top=TOP_NOTICIAS):
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1000, messages=[{"role": "user", "content": prompt}])
-        raw = msg.content[0].text.replace("```json", "").replace("```", "").strip()
-        start, end = raw.find("{"), raw.rfind("}")
-        return json.loads(raw[start:end+1])["top"], None
+        data = extraer_json_seguro(msg.content[0].text)
+        return data["top"] if data else [], None
     except Exception as e: return None, str(e)
 
 def obtener_20_tendencias_oficiales():
-    feedparser.USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     url_trends = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=AR"
     feed = feedparser.parse(url_trends)
     tendencias_diarias = []
@@ -173,9 +182,8 @@ def ia_analizar_tendencias(lista_20_tendencias):
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1000, messages=[{"role": "user", "content": prompt}])
-        raw = msg.content[0].text.replace("```json", "").replace("```", "").strip()
-        start, end = raw.find("{"), raw.rfind("}")
-        return json.loads(raw[start:end+1])["tendencias_utiles"], None
+        data = extraer_json_seguro(msg.content[0].text)
+        return data["tendencias_utiles"] if data else [], None
     except Exception as e: return None, str(e)
 
 def generar_digest():
@@ -207,7 +215,7 @@ with st.sidebar:
         "📰 Radar de Impacto Federal",
         "🔥 Tendencias (Top 20)",
         "🎯 Radar de Menciones",
-        "🔮 Predicción y Agenda",  # <--- ACÁ ESTÁ LA OPCIÓN DE LA AGENDA
+        "🔮 Predicción y Agenda",
         "🤖 Evaluador de Contenido",
         "🧠 Laboratorio de Audiencias",
         "📧 Alertas y Reportes"
@@ -296,8 +304,8 @@ elif menu == "🔮 Predicción y Agenda":
                     
                     {contexto_texto}
                     
-                    TAREA 1 (CALENDARIO DE EVENTOS): Detecta eventos futuros que se mencionen implícita o explícitamente en los titulares (Ej: si se habla de un proyecto, agenda el debate; si hay enojo social, agenda una posible marcha o declaración).
-                    TAREA 2 (EJES DE CONFLICTO): Deduce 3 temas que dominarán la conversación.
+                    TAREA 1 (CALENDARIO DE EVENTOS): Detecta eventos futuros explícitos o implícitos en las noticias (Ej: un debate de presupuesto, un paro anunciado, una indagatoria, una sesión legislativa).
+                    TAREA 2 (EJES ESTRATÉGICOS): Deduce 3 temas/conflictos que dominarán la conversación.
                     
                     Devuelve SOLO un JSON válido sin markdown, con esta estructura exacta:
                     {{
@@ -320,33 +328,34 @@ elif menu == "🔮 Predicción y Agenda":
                     try:
                         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
                         msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1500, messages=[{"role": "user", "content": prompt}])
-                        raw = msg.content[0].text.replace("```json", "").replace("```", "").strip()
-                        start, end = raw.find("{"), raw.rfind("}")
-                        data = json.loads(raw[start:end+1])
+                        data = extraer_json_seguro(msg.content[0].text)
                         
-                        st.success("✅ Agenda extraída de las noticias con éxito.")
-                        
-                        st.markdown("### 📅 Calendario de Eventos Detectados")
-                        if not data.get("agenda_concreta"):
-                            st.info("No se detectaron eventos con fecha exacta en las noticias de hoy.")
+                        if not data:
+                            st.error("Hubo un error interpretando los datos. Intentá de nuevo.")
                         else:
-                            for ev in data["agenda_concreta"]:
-                                st.markdown(f"""
-                                <div class="evento-card">
-                                    <span style='color:#e89a3c; font-weight:bold; font-size:15px;'>🗓️ {ev['tiempo'].upper()}</span><br>
-                                    <span style='font-size:18px; font-weight:bold; color:#2C3E50;'>{ev['evento']}</span><br>
-                                    <span style='color:#555;'>📝 <i>{ev['explicacion']}</i></span>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        st.divider()
-                        
-                        st.markdown("### 🎯 Predicción de Ejes de Conflicto")
-                        for eje in data.get("ejes_estrategicos", []):
-                            st.markdown(f"#### {eje['titulo']}")
-                            st.markdown(f"**💥 El Conflicto:** {eje['conflicto']}")
-                            st.markdown(f"**💡 Tip Estratégico:** {eje['tip']}")
-                            st.markdown("")
+                            st.success("✅ Agenda extraída de las noticias con éxito.")
+                            
+                            st.markdown("### 📅 Calendario de Eventos Detectados")
+                            if not data.get("agenda_concreta"):
+                                st.info("No se detectaron eventos con fecha exacta (sesiones, marchas) en los titulares de hoy.")
+                            else:
+                                for ev in data["agenda_concreta"]:
+                                    st.markdown(f"""
+                                    <div class="evento-card">
+                                        <span style='color:#e89a3c; font-weight:bold; font-size:15px;'>🗓️ {ev['tiempo'].upper()}</span><br>
+                                        <span style='font-size:18px; font-weight:bold; color:#2C3E50;'>{ev['evento']}</span><br>
+                                        <span style='color:#555;'>📝 <i>{ev['explicacion']}</i></span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            
+                            st.divider()
+                            
+                            st.markdown("### 🎯 Predicción de Ejes de Conflicto")
+                            for eje in data.get("ejes_estrategicos", []):
+                                st.markdown(f"#### {eje['titulo']}")
+                                st.markdown(f"**💥 El Conflicto:** {eje['conflicto']}")
+                                st.markdown(f"**💡 Tip Estratégico:** {eje['tip']}")
+                                st.markdown("")
                             
                     except Exception as e:
                         st.error(f"Error procesando el informe: {str(e)}")
@@ -364,16 +373,122 @@ elif menu == "🤖 Evaluador de Contenido":
                 try:
                     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
                     msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=600, messages=[{"role": "user", "content": prompt}])
-                    raw = msg.content[0].text.replace("```json", "").replace("```", "").strip()
-                    start, end = raw.find("{"), raw.rfind("}")
-                    data = json.loads(raw[start:end+1])
-                    score = data["score"]
-                    if score >= 75: st.success(f"✅ Score: {score}/100 — {data['veredicto']}")
-                    elif score >= 50: st.warning(f"⚠️ Score: {score}/100 — {data['veredicto']}")
-                    else: st.error(f"❌ Score: {score}/100 — {data['veredicto']}")
-                    st.info(f"📱 **Plataforma ideal:** {data['plataforma_ideal']}")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.markdown("👍 **Puntos Fuertes:**")
-                        for f in data["fortalezas"]: st.markdown(f"- {f}")
-                    with c2:
+                    data = extraer_json_seguro(msg.content[0].text)
+                    
+                    if data:
+                        score = data.get("score", 0)
+                        if score >= 75: st.success(f"✅ Score: {score}/100 — {data.get('veredicto', '')}")
+                        elif score >= 50: st.warning(f"⚠️ Score: {score}/100 — {data.get('veredicto', '')}")
+                        else: st.error(f"❌ Score: {score}/100 — {data.get('veredicto', '')}")
+                        
+                        st.info(f"📱 **Plataforma ideal:** {data.get('plataforma_ideal', '')}")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("👍 **Puntos Fuertes:**")
+                            for f in data.get("fortalezas", []): st.markdown(f"- {f}")
+                        with c2:
+                            st.markdown("🔧 **Correcciones Sugeridas:**")
+                            for m in data.get("mejoras", []): st.markdown(f"- {m}")
+                    else:
+                        st.error("No se pudo procesar la respuesta.")
+                except Exception as e: st.error(f"Error: {str(e)}")
+
+elif menu == "🧠 Laboratorio de Audiencias":
+    st.header("🧠 Laboratorio de Perfiles y Audiencias")
+    st.markdown("Personalizá y analizá cualquier perfil de redes sociales con IA. Subí capturas y cargá datos para encontrar el patrón de éxito.")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.markdown("### 1. Nueva Carga de Datos")
+        
+        # 1. Input libre en lugar de lista predefinida
+        perfil = st.text_input("👤 Nombre de Usuario o Perfil (Ej: @MairaMendoza, @Kicillofok):")
+        
+        # 2. Uploader de imágenes (Para tener registro visual en el historial)
+        imagen_subida = st.file_uploader("📸 Subir captura del posteo (Opcional)", type=["png", "jpg", "jpeg"])
+        if imagen_subida:
+            st.image(imagen_subida, caption="Captura lista para asociar a este registro", use_column_width=True)
+            
+        tema_texto = st.text_area("✍️ Tema o texto breve del tuit:", placeholder="Ej: Recorrida por obras hidráulicas...")
+        
+        col_imp, col_int = st.columns(2)
+        with col_imp:
+            imp = st.number_input("Impresiones", min_value=0, value=0)
+        with col_int:
+            int_ = st.number_input("Interacciones (Likes+RTs)", min_value=0, value=0)
+        
+        if st.button("Guardar en Historial", use_container_width=True):
+            if perfil.strip() == "":
+                st.error("Tenés que escribir el nombre del perfil.")
+            elif imp > 0 and tema_texto:
+                eng = round((int_ / imp) * 100, 2)
+                nuevo_registro = {
+                    "Perfil": perfil.strip(),
+                    "Tema/Texto": tema_texto,
+                    "Impresiones": imp,
+                    "Interacciones": int_,
+                    "Engagement (%)": eng,
+                    "Imagen": "Sí" if imagen_subida else "No"
+                }
+                # Guardamos como diccionario dentro de la lista (Evita el error de pandas .concat)
+                st.session_state['db_rendimiento'].append(nuevo_registro)
+                st.success(f"Dato guardado con éxito. Engagement calculado: {eng}%")
+            else:
+                st.error("Asegurate de cargar el texto y que las impresiones sean mayores a 0.")
+                
+    with col2:
+        st.markdown("### 2. Base de Datos Histórica")
+        df_mostrar = pd.DataFrame(st.session_state['db_rendimiento'])
+        if not df_mostrar.empty:
+            st.dataframe(df_mostrar, use_container_width=True)
+            
+            st.markdown("### 3. Extraer Manual de Estilo (IA)")
+            perfiles_cargados = df_mostrar['Perfil'].unique().tolist()
+            perfil_a_analizar = st.selectbox("¿De quién querés armar el manual de estilo?", perfiles_cargados)
+            
+            if st.button("Generar Patrón de Rendimiento", use_container_width=True):
+                if not ANTHROPIC_API_KEY: st.error("Falta API Key para procesar los datos.")
+                else:
+                    datos_filtrados = df_mostrar[df_mostrar['Perfil'] == perfil_a_analizar]
+                    textos_historicos = datos_filtrados.to_csv(index=False)
+                    
+                    with st.spinner("La IA está leyendo los datos y buscando el patrón de audiencia..."):
+                        prompt = f"""Sos un analista de datos y estratega político. Aquí tienes el historial de posteos de {perfil_a_analizar} con su nivel de Engagement Rate (Interacciones/Impresiones):\n\n{textos_historicos}\n\nTu tarea: Analiza estos datos y dime QUÉ FUNCIONA y QUÉ NO FUNCIONA para este perfil específico. Redacta un 'Manual de Estilo' en 3 viñetas claras indicando qué temas o tonos generan más atención en su audiencia y qué temas los aburren."""
+                        try:
+                            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+                            msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=800, messages=[{"role": "user", "content": prompt}])
+                            st.info(f"🧠 **Insight para {perfil_a_analizar}:**")
+                            st.markdown(msg.content[0].text)
+                        except Exception as e: st.error(str(e))
+        else:
+            st.info("La base de datos está vacía. Empezá a cargar ejemplos a la izquierda para poder analizarlos.")
+
+elif menu == "📧 Alertas y Reportes":
+    st.header("📧 Centro de Envíos y Alertas")
+    st.markdown("### 1. Generar Reporte General (Digest)")
+    if st.button("Generar y Enviar Digest", use_container_width=True):
+        if not ANTHROPIC_API_KEY or not GMAIL_APP_PASSWORD: st.error("Faltan claves de API o Mail.")
+        else:
+            with st.spinner("Compilando información a nivel nacional..."): html = generar_digest()
+            if html:
+                ok, msg = enviar_mail(f"📡 Digest Monitoreo — Top {TOP_NOTICIAS} Impacto", html)
+                if ok: st.success(msg); st.markdown(html, unsafe_allow_html=True)
+                else: st.error(msg)
+            else: st.error("No se pudo generar.")
+            
+    st.divider()
+    st.markdown("### 2. Escáner de Peligro Inminente")
+    st.caption("Palabras gatillo: " + ", ".join(PALABRAS_CLAVE))
+    if st.button("Escanear Palabras Clave Ahora", use_container_width=True):
+        with st.spinner("Rastreando palabras clave en todas las regiones..."):
+            alertas = []
+            for urls in RSS_FEEDS.values():
+                for n in obtener_noticias_crudas(urls, 5):
+                    claves = detectar_palabras_clave(n["Título"])
+                    if claves: alertas.append((n["Título"], n["Link"], claves))
+            if alertas:
+                html = "<h2>🚨 Alertas de Impacto Detectadas</h2>" + "".join([f"<p><b><a href='{l}'>{t}</a></b> <span style='color:#D32F2F'>[{', '.join(c).upper()}]</span></p>" for t, l, c in alertas])
+                ok, msg = enviar_mail(f"🚨 {len(alertas)} Alertas", html)
+                if ok: st.success(f"Enviado al correo. {len(alertas)} coincidencias.")
+            else: st.info("No se detectaron palabras de alerta.")
