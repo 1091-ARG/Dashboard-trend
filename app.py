@@ -18,6 +18,7 @@ st.set_page_config(page_title="Centro de Monitoreo", layout="wide", initial_side
 
 if "db_rendimiento" not in st.session_state:
     st.session_state["db_rendimiento"] = []
+    st.session_state["db_cargada_de_github"] = False
 
 st.markdown("""
 <style>
@@ -58,6 +59,15 @@ try:
 except:
     GMAIL_USER = GMAIL_APP_PASSWORD = ""
     MAIL_DESTINO = "correo@ejemplo.com"
+
+# Credenciales para guardar datos permanentes en GitHub
+try:
+    GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+    GITHUB_REPO = st.secrets.get("GITHUB_REPO", "")
+    GITHUB_CSV_PATH = st.secrets.get("GITHUB_CSV_PATH", "datos_perfiles.csv")
+except:
+    GITHUB_TOKEN = GITHUB_REPO = ""
+    GITHUB_CSV_PATH = "datos_perfiles.csv"
 
 PALABRAS_CLAVE = ["jubilados", "femicidio", "terremoto", "tragedia", "muerte", "protesta",
                   "corrupción", "corrupcion", "paro", "represión", "represion", "escándalo", "inundación"]
@@ -191,6 +201,72 @@ def enviar_mail(asunto, cuerpo_html):
             server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             server.send_message(msg)
         return True, "Mail enviado correctamente."
+    except Exception as e:
+        return False, str(e)
+
+# ── GUARDADO PERMANENTE EN GITHUB (CSV) ──
+
+COLUMNAS_CSV = ["Perfil", "Cargo", "Organización", "Alianzas", "Tema/Texto",
+                "Impresiones", "Interacciones", "Engagement (%)"]
+
+def github_headers():
+    return {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+def cargar_csv_github():
+    """Lee el CSV guardado en GitHub. Devuelve (lista_de_registros, sha_del_archivo)."""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return [], None
+    import base64, io
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_CSV_PATH}"
+    try:
+        r = requests.get(url, headers=github_headers(), timeout=10)
+        if r.status_code == 200:
+            info = r.json()
+            contenido = base64.b64decode(info["content"]).decode("utf-8")
+            df = pd.read_csv(io.StringIO(contenido))
+            return df.to_dict("records"), info["sha"]
+        elif r.status_code == 404:
+            # El archivo todavía no existe
+            return [], None
+        else:
+            return [], None
+    except Exception:
+        return [], None
+
+def guardar_csv_github(registros):
+    """Sobrescribe el CSV en GitHub con la lista completa de registros."""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return False, "Faltan GITHUB_TOKEN o GITHUB_REPO en los Secrets."
+    import base64, io
+    try:
+        df = pd.DataFrame(registros)
+        # Asegurar todas las columnas en orden
+        for col in COLUMNAS_CSV:
+            if col not in df.columns:
+                df[col] = ""
+        df = df[COLUMNAS_CSV]
+        csv_texto = df.to_csv(index=False)
+        contenido_b64 = base64.b64encode(csv_texto.encode("utf-8")).decode("utf-8")
+
+        # Obtener el sha actual (si existe) para poder actualizar
+        _, sha = cargar_csv_github()
+
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_CSV_PATH}"
+        payload = {
+            "message": f"Actualizar datos de perfiles — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            "content": contenido_b64,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        r = requests.put(url, headers=github_headers(), json=payload, timeout=10)
+        if r.status_code in (200, 201):
+            return True, "Guardado en GitHub correctamente."
+        else:
+            return False, f"Error de GitHub: {r.status_code} — {r.json().get('message', '')}"
     except Exception as e:
         return False, str(e)
 
@@ -632,11 +708,24 @@ elif menu == "🧠 Laboratorio de Audiencias":
     st.header("🧠 Laboratorio de Perfiles y Audiencias")
     st.markdown("Cargá posteos de cualquier figura pública y la IA analiza qué le rinde, su tono predominante y su rol político.")
 
+    # Cargar los datos guardados en GitHub la primera vez que se abre
+    if not st.session_state.get("db_cargada_de_github", False):
+        if GITHUB_TOKEN and GITHUB_REPO:
+            registros_github, _ = cargar_csv_github()
+            if registros_github:
+                st.session_state["db_rendimiento"] = registros_github
+        st.session_state["db_cargada_de_github"] = True
+
+    if GITHUB_TOKEN and GITHUB_REPO:
+        st.caption("💾 Guardado permanente activo — los datos se conservan en GitHub")
+    else:
+        st.caption("⚠️ Guardado temporal — configurá GITHUB_TOKEN en los Secrets para que los datos no se borren")
+
     col1, col2 = st.columns([1, 1])
 
     with col1:
         st.markdown("### Cargar nuevo registro")
-        perfil = st.text_input("👤 Nombre del perfil:", placeholder="Ej: @MairaMendoza")
+        perfil = st.text_input("👤 Nombre del perfil:", placeholder="Ej: @MayraMendoza")
         cargo = st.text_input("🏛️ Cargo:", placeholder="Ej: Diputada Nacional")
         organizacion = st.text_input("🏢 Organización/Partido:", placeholder="Ej: Unión por la Patria")
         alianzas = st.text_input("🤝 Aliado/a a:", placeholder="Ej: Kirchnerismo / Massa")
@@ -665,7 +754,15 @@ elif menu == "🧠 Laboratorio de Audiencias":
                     "Interacciones": int_,
                     "Engagement (%)": eng,
                 })
-                st.success(f"✅ Guardado. Engagement: {eng}%")
+                # Guardar permanente en GitHub
+                if GITHUB_TOKEN and GITHUB_REPO:
+                    ok, msg = guardar_csv_github(st.session_state["db_rendimiento"])
+                    if ok:
+                        st.success(f"✅ Guardado permanente. Engagement: {eng}%")
+                    else:
+                        st.warning(f"Guardado local OK, pero falló en GitHub: {msg}")
+                else:
+                    st.success(f"✅ Guardado (temporal). Engagement: {eng}%")
             else:
                 st.error("Completá el texto y las impresiones.")
 
@@ -674,6 +771,14 @@ elif menu == "🧠 Laboratorio de Audiencias":
         df = pd.DataFrame(st.session_state["db_rendimiento"])
         if not df.empty:
             st.dataframe(df[["Perfil", "Cargo", "Organización", "Tema/Texto", "Engagement (%)"]], use_container_width=True)
+            with st.expander("🗑️ Borrar todos los registros"):
+                st.warning("Esto borra TODA la base de datos, también en GitHub. No se puede deshacer.")
+                if st.button("Confirmar borrado total"):
+                    st.session_state["db_rendimiento"] = []
+                    if GITHUB_TOKEN and GITHUB_REPO:
+                        guardar_csv_github([])
+                    st.success("Base de datos vaciada.")
+                    st.rerun()
         else:
             st.info("Todavía no hay registros. Cargá ejemplos a la izquierda.")
 
