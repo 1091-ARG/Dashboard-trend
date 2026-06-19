@@ -159,32 +159,36 @@ def ia_curar_regional(noticias_lista, contexto_region, top=TOP_NOTICIAS):
     Devolvé SOLO JSON sin markdown: {{"top": [{{"idx": número, "porque": "impacto, max 12 palabras"}}]}}\n\nNoticias:\n{titles}"""
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1000, messages=[{"role": "user", "content": prompt}])
+        msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1000, messages=[{"role": "user", "content": prompt}])
         data = extraer_json_seguro(msg.content[0].text)
         return data["top"] if data else [], None
     except Exception as e: return None, str(e)
 
-def obtener_20_tendencias_oficiales():
-    url_trends = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=AR"
-    feed = feedparser.parse(url_trends)
-    tendencias_diarias = []
-    for entry in feed.entries[:20]:
-        tendencias_diarias.append(f"- Tema: {entry.title} | Tráfico: {entry.get('ht_approx_traffic', 'N/A')} | Contexto: {getattr(entry, 'ht_news_item_title', 'Sin titular')}")
-    return tendencias_diarias
-
-def ia_analizar_tendencias(lista_20_tendencias):
+def ia_buscar_tendencias_web():
+    """Busca tendencias reales del día con web search (reemplaza el feed muerto de Google Trends)."""
     if not ANTHROPIC_API_KEY: return None, "Falta la API key de Anthropic."
-    tendencias_texto = "\n".join(lista_20_tendencias)
-    prompt = f"""Aquí tienes las 20 búsquedas más virales de Google Argentina HOY:\n{tendencias_texto}\n
-    Filtra SOLO los temas que tengan impacto nacional: Política, Economía, Tragedias, Conflictos o Gestión. 
-    IGNORA por completo partidos de fútbol, deportes, farándula. Si todo es fútbol, devuelve lista vacía.
-    Devuelve SOLO JSON: {{"tendencias_utiles": [{{"tema": "palabra buscada", "busquedas": "tráfico", "angulo": "por qué impacta en 1 oración"}}]}}"""
+    hoy = datetime.now().strftime("%d/%m/%Y")
+    prompt = f"""Hoy es {hoy}. Buscá en la web qué temas están siendo tendencia HOY en Argentina, en redes sociales (X/Twitter) y medios digitales. Enfocate en lo político, económico, social y tragedias/conflictos con conversación caliente.
+
+IGNORÁ por completo fútbol, deportes y farándula salvo que tengan derivada política real.
+
+Devolvé SOLO JSON sin markdown, con esta estructura exacta:
+{{"tendencias_utiles": [{{"tema": "tema o palabra", "busquedas": "nivel: explotando/subiendo/estable", "angulo": "por qué impacta y ángulo de contenido en 1 oración"}}]}}
+
+Dame entre 6 y 8 tendencias reales y verificadas de hoy."""
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1000, messages=[{"role": "user", "content": prompt}])
-        data = extraer_json_seguro(msg.content[0].text)
-        return data["tendencias_utiles"] if data else [], None
-    except Exception as e: return None, str(e)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}],
+        )
+        texto = "".join([b.text for b in msg.content if hasattr(b, "text")])
+        data = extraer_json_seguro(texto)
+        return (data["tendencias_utiles"] if data else []), None
+    except Exception as e:
+        return None, str(e)
 
 def generar_digest():
     todas = []
@@ -251,27 +255,22 @@ if menu == "📰 Radar de Impacto Federal":
 
 elif menu == "🔥 Tendencias (Top 20)":
     st.header("🔥 Tendencias Virales de Argentina")
-    if st.button("Escanear Tendencias Diarias", use_container_width=True):
-        with st.spinner("Conectando con Google Trends..."):
-            top_20_brutas = obtener_20_tendencias_oficiales()
-        if not top_20_brutas: st.error("No se pudo conectar a Google Trends.")
+    st.markdown("La IA busca en la web qué está caliente hoy en redes y medios, y descarta el ruido de deportes y farándula.")
+    if st.button("Escanear Tendencias del Día", use_container_width=True):
+        if not ANTHROPIC_API_KEY:
+            st.error("Falta la API key de Anthropic.")
         else:
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                st.markdown("### 🌐 Top 20 Crudo de Google")
-                for t in top_20_brutas: st.markdown(t)
-            with col2:
-                st.markdown("### 🤖 Curaduría de Impacto IA")
-                if not ANTHROPIC_API_KEY: st.error("Falta API Key.")
-                else:
-                    with st.spinner("Limpiando agenda..."):
-                        utiles, err = ia_analizar_tendencias(top_20_brutas)
-                    if err: st.error(err)
-                    elif not utiles: st.info("Hoy la agenda viral es puro deporte o farándula. No hay tendencias duras.")
-                    else:
-                        for u in utiles:
-                            st.success(f"**{u.get('tema', 'Tema')}** ({u.get('busquedas', '')})")
-                            st.markdown(f"💡 **Relevancia:** {u.get('angulo', '')}")
+            with st.spinner("Buscando tendencias reales en la web..."):
+                utiles, err = ia_buscar_tendencias_web()
+            if err:
+                st.error(f"No se pudieron obtener tendencias: {err}")
+            elif not utiles:
+                st.info("Hoy la agenda viral es puro deporte o farándula. No hay tendencias duras.")
+            else:
+                for u in utiles:
+                    st.success(f"**{u.get('tema', 'Tema')}**  ·  {u.get('busquedas', '')}")
+                    st.markdown(f"💡 **Relevancia:** {u.get('angulo', '')}")
+                    st.divider()
 
 elif menu == "🎯 Radar de Menciones":
     st.header("🎯 Radar de Menciones")
@@ -327,7 +326,7 @@ elif menu == "🔮 Predicción y Agenda":
                     
                     try:
                         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-                        msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=1500, messages=[{"role": "user", "content": prompt}])
+                        msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500, messages=[{"role": "user", "content": prompt}])
                         data = extraer_json_seguro(msg.content[0].text)
                         
                         if not data:
@@ -372,7 +371,7 @@ elif menu == "🤖 Evaluador de Contenido":
                 Devolvé SOLO JSON: {{"score": número 0-100, "veredicto": "frase corta", "fortalezas": ["f1", "f2"], "mejoras": ["m1", "m2"], "plataforma_ideal": "X / Instagram / LinkedIn"}}"""
                 try:
                     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-                    msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=600, messages=[{"role": "user", "content": prompt}])
+                    msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=600, messages=[{"role": "user", "content": prompt}])
                     data = extraer_json_seguro(msg.content[0].text)
                     
                     if data:
@@ -408,7 +407,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
         # 2. Uploader de imágenes (Para tener registro visual en el historial)
         imagen_subida = st.file_uploader("📸 Subir captura del posteo (Opcional)", type=["png", "jpg", "jpeg"])
         if imagen_subida:
-            st.image(imagen_subida, caption="Captura lista para asociar a este registro", use_column_width=True)
+            st.image(imagen_subida, caption="Captura lista para asociar a este registro", use_container_width=True)
             
         tema_texto = st.text_area("✍️ Tema o texto breve del tuit:", placeholder="Ej: Recorrida por obras hidráulicas...")
         
@@ -457,7 +456,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
                         prompt = f"""Sos un analista de datos y estratega político. Aquí tienes el historial de posteos de {perfil_a_analizar} con su nivel de Engagement Rate (Interacciones/Impresiones):\n\n{textos_historicos}\n\nTu tarea: Analiza estos datos y dime QUÉ FUNCIONA y QUÉ NO FUNCIONA para este perfil específico. Redacta un 'Manual de Estilo' en 3 viñetas claras indicando qué temas o tonos generan más atención en su audiencia y qué temas los aburren."""
                         try:
                             client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-                            msg = client.messages.create(model="claude-3-5-sonnet-20240620", max_tokens=800, messages=[{"role": "user", "content": prompt}])
+                            msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=800, messages=[{"role": "user", "content": prompt}])
                             st.info(f"🧠 **Insight para {perfil_a_analizar}:**")
                             st.markdown(msg.content[0].text)
                         except Exception as e: st.error(str(e))
