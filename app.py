@@ -22,7 +22,7 @@ h1, h2, h3 {color: #FFFFFF !important;}
 .stButton button {background-color: #e89a3c; color: #0e0e10; font-weight: 600; border: none;}
 </style>""", unsafe_allow_html=True)
 
-st.title("📡 1091 — Centro de Monitoreo")
+st.title("Centro de Monitoreo")
 
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY", "")
 GMAIL_USER = st.secrets.get("GMAIL_USER", "")
@@ -32,7 +32,7 @@ MAIL_DESTINO = st.secrets.get("MAIL_DESTINO", "matumontanez@gmail.com")
 PALABRAS_CLAVE = [
     "jubilados", "cristina", "milei", "pami", "subte", "protesta",
     "legislatura", "corrupción", "corrupcion", "femicidio", "huelga",
-    "desaparecido", "intendente", "juicio", "paro", "represión", "represion",
+    "desaparecido", "intendente", "juicio", "paro", "represión", "represion","kicillof",
 ]
 
 CUTOFF_HORAS = 24
