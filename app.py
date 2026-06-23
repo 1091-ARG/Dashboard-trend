@@ -13,10 +13,6 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  CONFIGURACIÓN
-# ══════════════════════════════════════════════════════════════════════════════
-
 st.set_page_config(page_title="Centro de Monitoreo", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -30,10 +26,10 @@ st.markdown("""
     .stButton > button { background-color: #2C3E50 !important; color: #FFFFFF !important; font-weight: bold !important; border-radius: 6px !important; border: none !important; }
     .stButton > button * { color: #FFFFFF !important; }
     .stButton > button:hover { background-color: #1A252F !important; }
-    .stTextInput input, .stTextArea textarea, .stNumberInput input, .stSelectbox div { background-color: #FFFFFF !important; color: #1E1E1E !important; }
+    .stTextInput input, .stTextArea textarea, .stNumberInput input { background-color: #FFFFFF !important; color: #1E1E1E !important; }
     hr { border-color: #E0E0E0; }
     .sidebar-title { font-size: 20px; font-weight: bold; color: #2C3E50; padding-bottom: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
-    .news-card { background-color: #FFFFFF; padding: 16px 20px; border-radius: 10px; border-left: 4px solid #2C3E50; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px; }
+    .news-card { background-color: #FFFFFF; padding: 14px 18px; border-radius: 10px; border-left: 4px solid #2C3E50; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 10px; }
     .news-nuevo { border-left-color: #c0392b !important; background-color: #fff8f7 !important; }
     .news-madrugada { border-left-color: #8e44ad !important; background-color: #faf7fc !important; }
     .tag-tiempo { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; display: inline-block; }
@@ -47,15 +43,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  CREDENCIALES
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ── CREDENCIALES ──
 try:
     ANTHROPIC_API_KEY = st.secrets["ANTHROPIC_API_KEY"]
 except:
     ANTHROPIC_API_KEY = ""
-
 try:
     GMAIL_USER = st.secrets["GMAIL_USER"]
     GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
@@ -63,7 +55,6 @@ try:
 except:
     GMAIL_USER = GMAIL_APP_PASSWORD = ""
     MAIL_DESTINO = "correo@ejemplo.com"
-
 try:
     GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
     GITHUB_REPO = st.secrets.get("GITHUB_REPO", "")
@@ -74,16 +65,10 @@ PALABRAS_CLAVE = ["jubilados", "femicidio", "tragedia", "muerte", "protesta",
                   "corrupción", "corrupcion", "paro", "represión", "represion",
                   "escándalo", "inundación", "adorni", "presupuesto"]
 
-VENTANA_HORAS = 10       # Ventana de frescura de noticias
-TOP_NOTICIAS = 15        # Cantidad de noticias en la bandeja
-
-# Rutas de los archivos de datos en GitHub
+VENTANA_HORAS = 10
+TOP_NOTICIAS = 15
 PATH_INBOX = "noticias_inbox.csv"
 PATH_AUDIENCIA = "datos_audiencia.csv"
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  FEEDS RSS
-# ══════════════════════════════════════════════════════════════════════════════
 
 RSS_FEEDS = {
     "CENTRO Y ESPINAZO": [
@@ -127,9 +112,8 @@ RSS_FEEDS = {
         "https://www.ambito.com/rss/politica.xml",
     ],
 }
-
 REGION_CONTEXTO = {
-    "CENTRO Y ESPINAZO": "las provincias de Córdoba, Tucumán, Mendoza, Río Negro/Neuquén y Santa Fe (Rosario)",
+    "CENTRO Y ESPINAZO": "las provincias de Córdoba, Tucumán, Mendoza, Río Negro/Neuquén y Santa Fe",
     "LITORAL": "las provincias de Santa Fe y Entre Ríos",
     "CUYO": "las provincias de Mendoza, San Juan y San Luis",
     "NOA": "las provincias de Salta, Jujuy, Tucumán, Santiago del Estero y Catamarca",
@@ -140,15 +124,11 @@ REGION_CONTEXTO = {
     "POLÍTICA NACIONAL": "la política nacional argentina",
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  FUNCIONES DE GITHUB (memoria permanente)
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ══ FUNCIONES GITHUB (memoria permanente) ══
 def github_headers():
     return {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
 def cargar_csv_github(path):
-    """Lee un CSV de GitHub. Devuelve (DataFrame, sha) o (DataFrame vacío, None)."""
     if not GITHUB_TOKEN or not GITHUB_REPO:
         return pd.DataFrame(), None
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
@@ -159,16 +139,14 @@ def cargar_csv_github(path):
             contenido = base64.b64decode(info["content"]).decode("utf-8")
             if not contenido.strip():
                 return pd.DataFrame(), info["sha"]
-            df = pd.read_csv(io.StringIO(contenido))
-            return df, info["sha"]
+            return pd.read_csv(io.StringIO(contenido)), info["sha"]
         return pd.DataFrame(), None
     except Exception:
         return pd.DataFrame(), None
 
 def guardar_csv_github(path, df, mensaje):
-    """Sobrescribe un CSV en GitHub con el DataFrame dado."""
     if not GITHUB_TOKEN or not GITHUB_REPO:
-        return False, "Faltan GITHUB_TOKEN o GITHUB_REPO en los Secrets."
+        return False, "Faltan GITHUB_TOKEN o GITHUB_REPO."
     try:
         csv_texto = df.to_csv(index=False)
         contenido_b64 = base64.b64encode(csv_texto.encode("utf-8")).decode("utf-8")
@@ -179,21 +157,16 @@ def guardar_csv_github(path, df, mensaje):
             payload["sha"] = sha
         r = requests.put(url, headers=github_headers(), json=payload, timeout=10)
         if r.status_code in (200, 201):
-            return True, "Guardado correctamente."
+            return True, "Guardado."
         return False, f"Error GitHub {r.status_code}: {r.json().get('message','')}"
     except Exception as e:
         return False, str(e)
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  FUNCIONES BASE DE NOTICIAS
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ══ FUNCIONES BASE ══
 def hash_noticia(titulo):
-    """ID único y estable de una noticia, basado en su título."""
     return hashlib.md5(titulo.encode("utf-8")).hexdigest()[:12]
 
 def parse_fecha(entry):
-    """Devuelve datetime con tz de la noticia, o None."""
     for campo in ("published", "updated"):
         raw = entry.get(campo, "")
         if not raw:
@@ -208,14 +181,11 @@ def parse_fecha(entry):
     return None
 
 def etiqueta_tiempo(dt_pub):
-    """Genera la etiqueta visual según antigüedad y franja horaria."""
     if dt_pub is None:
         return "tag-normal", "Sin fecha", 999999
     ahora = datetime.now(timezone.utc)
-    delta = ahora - dt_pub
-    minutos = delta.total_seconds() / 60
+    minutos = (ahora - dt_pub).total_seconds() / 60
     horas = minutos / 60
-    # Hora local Argentina (UTC-3) para detectar madrugada
     hora_local = (dt_pub - timedelta(hours=3)).hour
     es_madrugada = 0 <= hora_local < 7
     if minutos < 60:
@@ -254,23 +224,18 @@ def enviar_mail(asunto, cuerpo_html):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             server.send_message(msg)
-        return True, "Mail enviado correctamente."
+        return True, "Mail enviado."
     except Exception as e:
         return False, str(e)
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  BANDEJA DE ENTRADA — escaneo + descarte persistente
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ══ INBOX (bandeja con descarte persistente) ══
 def cargar_inbox():
-    """Carga el inbox de GitHub. Columnas: id, titulo, link, region, fecha_pub, descartada."""
     df, _ = cargar_csv_github(PATH_INBOX)
     if df.empty:
-        return pd.DataFrame(columns=["id", "titulo", "link", "region", "fecha_pub", "descartada"])
+        return pd.DataFrame(columns=["id","titulo","link","region","fecha_pub","descartada"])
     return df
 
 def escanear_y_actualizar_inbox(region):
-    """Lee los feeds de la región, agrega noticias nuevas al inbox (sin duplicar ni resucitar descartadas)."""
     inbox = cargar_inbox()
     ids_existentes = set(inbox["id"].astype(str)) if not inbox.empty else set()
     nuevas = []
@@ -289,29 +254,24 @@ def escanear_y_actualizar_inbox(region):
                     continue
                 ids_existentes.add(nid)
                 nuevas.append({
-                    "id": nid,
-                    "titulo": titulo,
-                    "link": entry.get("link", "#"),
-                    "region": region,
-                    "fecha_pub": dt_pub.isoformat() if dt_pub else "",
+                    "id": nid, "titulo": titulo, "link": entry.get("link","#"),
+                    "region": region, "fecha_pub": dt_pub.isoformat() if dt_pub else "",
                     "descartada": False,
                 })
         except Exception:
             continue
     if nuevas:
         inbox = pd.concat([inbox, pd.DataFrame(nuevas)], ignore_index=True)
-        guardar_csv_github(PATH_INBOX, inbox, f"Inbox actualizado {region} {datetime.now().strftime('%d/%m %H:%M')}")
+        guardar_csv_github(PATH_INBOX, inbox, f"Inbox {region} {datetime.now().strftime('%d/%m %H:%M')}")
     return inbox, len(nuevas)
 
 def descartar_noticia(nid):
-    """Marca una noticia como descartada y guarda en GitHub."""
     inbox = cargar_inbox()
     if not inbox.empty:
         inbox.loc[inbox["id"].astype(str) == str(nid), "descartada"] = True
-        guardar_csv_github(PATH_INBOX, inbox, f"Descartada noticia {nid}")
+        guardar_csv_github(PATH_INBOX, inbox, f"Leída {nid}")
 
 def limpiar_inbox_viejas():
-    """Borra del inbox las noticias que ya salieron de la ventana de 10hs (descartadas o no)."""
     inbox = cargar_inbox()
     if inbox.empty:
         return
@@ -324,22 +284,18 @@ def limpiar_inbox_viejas():
             return (ahora - dt) <= timedelta(hours=VENTANA_HORAS)
         except Exception:
             return False
-    inbox_filtrada = inbox[inbox.apply(vigente, axis=1)]
-    if len(inbox_filtrada) != len(inbox):
-        guardar_csv_github(PATH_INBOX, inbox_filtrada, "Limpieza de noticias fuera de ventana")
+    filtrada = inbox[inbox.apply(vigente, axis=1)]
+    if len(filtrada) != len(inbox):
+        guardar_csv_github(PATH_INBOX, filtrada, "Limpieza fuera de ventana")
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  FUNCIONES IA
-# ══════════════════════════════════════════════════════════════════════════════
-
+# ══ FUNCIONES IA ══
 def ia_curar_inbox(noticias_activas, contexto_region, top=TOP_NOTICIAS):
-    """La IA ordena y prioriza las noticias activas del inbox por relevancia política."""
     if not ANTHROPIC_API_KEY or not noticias_activas:
         return list(range(len(noticias_activas))), None
     titles = "\n".join([f"[{i}] {n['titulo']}" for i, n in enumerate(noticias_activas)])
-    prompt = f"""Sos el Jefe de Redacción de un medio federal cubriendo {contexto_region}.
-De estas noticias frescas, ordená las {top} MÁS RELEVANTES políticamente (impacto, poder, conflicto, corrupción, tragedia, gestión). Descartá fútbol y farándula.
-Devolvé SOLO JSON sin markdown: {{"orden": [lista de índices ordenados de más a menos importante]}}
+    prompt = f"""Sos Jefe de Redacción cubriendo {contexto_region}.
+Ordená las {top} noticias MÁS RELEVANTES políticamente (impacto, poder, conflicto, corrupción, tragedia, gestión). Descartá fútbol y farándula.
+Devolvé SOLO JSON sin markdown: {{"orden": [índices de más a menos importante]}}
 
 Noticias:
 {titles}"""
@@ -355,46 +311,171 @@ Noticias:
         return list(range(len(noticias_activas))), str(e)
 
 def ia_analizar_perfil_cruzado(datos_twitter, datos_instagram, nombre_perfil):
-    """Análisis comparativo Twitter vs Instagram de un perfil."""
     if not ANTHROPIC_API_KEY:
-        return None, "Falta API key de Anthropic."
+        return None, "Falta API key."
     prompt = f"""Sos analista de comunicación política. Perfil: {nombre_perfil}.
-
-DATOS DE TWITTER/X:
+DATOS TWITTER/X:
 {datos_twitter if datos_twitter else "Sin datos"}
-
-DATOS DE INSTAGRAM:
+DATOS INSTAGRAM:
 {datos_instagram if datos_instagram else "Sin datos"}
 
-Hacé un análisis comparativo cruzado. Devolvé SOLO JSON sin markdown:
-{{
-  "distribucion_temas": {{"Economía": %, "Derechos Sociales": %, "Seguridad": %, "Gestión/Obras": %, "Confrontación": %, "Otro": %}},
-  "distribucion_tono": {{"Agresivo": %, "Conciliador": %, "Constructivo": %, "Informativo": %}},
-  "insight_twitter": "qué le rinde en Twitter, 2 oraciones",
-  "insight_instagram": "qué le rinde en Instagram y qué formato funciona mejor, 2 oraciones",
-  "recomendacion_general": "recomendación táctica cruzada, 2-3 oraciones",
-  "actitud_predominante": "Agresivo|Conciliador|Constructivo|Informativo"
-}}
-Los porcentajes de cada distribución suman 100."""
+Análisis comparativo cruzado. Devolvé SOLO JSON sin markdown:
+{{"distribucion_temas": {{"Economía": %, "Derechos Sociales": %, "Seguridad": %, "Gestión/Obras": %, "Confrontación": %, "Otro": %}}, "distribucion_tono": {{"Agresivo": %, "Conciliador": %, "Constructivo": %, "Informativo": %}}, "insight_twitter": "2 oraciones", "insight_instagram": "qué formato funciona mejor, 2 oraciones", "recomendacion_general": "2-3 oraciones", "actitud_predominante": "Agresivo|Conciliador|Constructivo|Informativo"}}
+Cada distribución suma 100."""
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500,
                                      messages=[{"role": "user", "content": prompt}])
-        data = extraer_json_seguro(msg.content[0].text)
-        return data, None
+        return extraer_json_seguro(msg.content[0].text), None
     except Exception as e:
         return None, str(e)
+
+# ══ TENDENCIAS — TRIPLE RESPALDO ══
+def scrape_trends24():
+    """Fuente 1: Trends24.in — trending topics de X Argentina."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get("https://trends24.in/argentina/", headers=headers, timeout=8)
+        if r.status_code != 200:
+            return []
+        from html.parser import HTMLParser
+        class TrendParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.trends = []
+                self.in_trend = False
+            def handle_starttag(self, tag, attrs):
+                attrs_dict = dict(attrs)
+                if tag == "a" and "trend-link" in attrs_dict.get("class", ""):
+                    self.in_trend = True
+            def handle_data(self, data):
+                if self.in_trend and data.strip():
+                    self.trends.append(data.strip())
+                    self.in_trend = False
+        parser = TrendParser()
+        parser.feed(r.text)
+        return parser.trends[:20] if parser.trends else []
+    except:
+        return []
+
+def scrape_getdaytrends():
+    """Fuente 2: Getdaytrends.com — segunda fuente de X Argentina."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get("https://getdaytrends.com/es/argentina/", headers=headers, timeout=8)
+        if r.status_code != 200:
+            return []
+        from html.parser import HTMLParser
+        class TrendParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.trends = []
+                self.capture = False
+            def handle_starttag(self, tag, attrs):
+                attrs_dict = dict(attrs)
+                cls = attrs_dict.get("class", "")
+                if tag in ("td", "span") and ("trend" in cls.lower() or "main" in cls.lower()):
+                    self.capture = True
+            def handle_data(self, data):
+                if self.capture and data.strip() and data.strip().startswith("#"):
+                    self.trends.append(data.strip())
+                    self.capture = False
+            def handle_endtag(self, tag):
+                self.capture = False
+        parser = TrendParser()
+        parser.feed(r.text)
+        return list(dict.fromkeys(parser.trends))[:20]
+    except:
+        return []
+
+def ia_web_search_tendencias():
+    """Fuente 3: Búsqueda web IA — solo se activa si las dos anteriores fallan."""
+    if not ANTHROPIC_API_KEY:
+        return [], "Sin API key"
+    hoy = datetime.now().strftime("%d/%m/%Y")
+    prompt = f"""Hoy es {hoy}. Buscá AHORA MISMO qué hashtags y temas están siendo tendencia en X (Twitter) Argentina en este momento. Buscá en tiempo real, no uses datos de tu entrenamiento.
+
+Devolvé SOLO JSON sin markdown:
+{{"tendencias": ["#tema1", "#tema2", "tema3"]}}
+
+Dame entre 8 y 15 temas/hashtags reales de hoy."""
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}],
+        )
+        texto = "".join([b.text for b in msg.content if hasattr(b, "text")])
+        data = extraer_json_seguro(texto)
+        if data and "tendencias" in data:
+            return data["tendencias"], None
+        return [], None
+    except Exception as e:
+        return [], str(e)
+
+def ia_filtrar_tendencias(trends_raw, fuente):
+    """La IA filtra el ruido (fútbol/farándula) y da el ángulo político de cada tema."""
+    if not ANTHROPIC_API_KEY or not trends_raw:
+        return None, "Sin datos o sin API key"
+    lista = "\n".join([f"- {t}" for t in trends_raw])
+    prompt = f"""Tenés esta lista de trending topics de X Argentina (fuente: {fuente}):
+{lista}
+
+Filtrá SOLO los que tengan impacto político, económico, social o de tragedia. IGNORÁ partidos de fútbol, deportes, cantantes, actores. Si no queda nada relevante, devolvé lista vacía.
+
+Para cada uno, asigná un nivel real y un ángulo de contenido político.
+
+Devolvé SOLO JSON sin markdown:
+{{"filtrados": [{{"tema": "#hashtag o tema", "nivel": "explotando|subiendo|estable", "angulo": "por qué importa políticamente, 1 oración"}}]}}"""
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        data = extraer_json_seguro(msg.content[0].text)
+        return (data["filtrados"] if data else []), None
+    except Exception as e:
+        return None, str(e)
+
+def obtener_tendencias_con_respaldo():
+    """Sistema triple: prueba fuente 1, si falla fuente 2, si falla fuente 3. Si las 3 fallan, avisa."""
+    # Fuente 1
+    trends = scrape_trends24()
+    if trends:
+        return trends, "Trends24 (X Argentina)"
+    # Fuente 2
+    trends = scrape_getdaytrends()
+    if trends:
+        return trends, "GetDayTrends (X Argentina)"
+    # Fuente 3
+    trends, err = ia_web_search_tendencias()
+    if trends:
+        return trends, "Búsqueda web en tiempo real"
+    # Todo falló
+    return [], None
+
+def emoji_nivel(nivel):
+    n = str(nivel).lower()
+    if "explot" in n: return "🔴 EXPLOTANDO"
+    if "sub" in n: return "🟠 SUBIENDO"
+    if "estable" in n: return "🟡 ESTABLE"
+    return "⚪ SIN DATO"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  MENÚ LATERAL
 # ══════════════════════════════════════════════════════════════════════════════
-
 with st.sidebar:
     st.markdown('<p class="sidebar-title">CENTRO DE MONITOREO</p>', unsafe_allow_html=True)
     st.markdown("<p style='text-align:center; color:#555; font-size:13px;'>Panel de Control</p>", unsafe_allow_html=True)
     st.divider()
     menu = st.radio("", [
         "📥 Bandeja de Noticias",
+        "🔥 Tendencias (Triple Respaldo)",
         "🎯 Radar de Menciones",
         "🔮 Predicción y Agenda",
         "🤖 Evaluador de Contenido",
@@ -405,44 +486,36 @@ with st.sidebar:
     if GITHUB_TOKEN and GITHUB_REPO:
         st.caption("💾 Memoria permanente: ACTIVA")
     else:
-        st.caption("⚠️ Memoria: configurá GITHUB_TOKEN")
+        st.caption("⚠️ Configurá GITHUB_TOKEN")
     st.caption(f"Ventana: {VENTANA_HORAS}hs · Top {TOP_NOTICIAS}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: BANDEJA DE NOTICIAS
+#  BANDEJA DE NOTICIAS
 # ══════════════════════════════════════════════════════════════════════════════
-
 if menu == "📥 Bandeja de Noticias":
     st.header("📥 Bandeja de Entrada de Noticias")
-    st.markdown(f"Estilo mail: las noticias frescas (últimas **{VENTANA_HORAS}hs**) entran acá. Las vas **descartando** a medida que las leés y quedan archivadas para siempre. Lo de la madrugada queda destacado.")
-
+    st.markdown(f"Las noticias frescas (últimas **{VENTANA_HORAS}hs**) entran a la lista. Las vas marcando como **leídas** y quedan archivadas para siempre. Lo de la madrugada queda destacado.")
     reg = st.selectbox("Región:", list(RSS_FEEDS.keys()))
-
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
+    ca, cb = st.columns(2)
+    with ca:
         escanear = st.button("🔄 Buscar noticias nuevas", use_container_width=True)
-    with col_b:
-        limpiar = st.button("🧹 Limpiar viejas (fuera de 10hs)", use_container_width=True)
-
+    with cb:
+        limpiar = st.button("🧹 Limpiar viejas (+10hs)", use_container_width=True)
     if not GITHUB_TOKEN or not GITHUB_REPO:
-        st.warning("⚠️ Sin GITHUB_TOKEN configurado, el descarte no se guarda entre sesiones.")
-
+        st.warning("⚠️ Sin GITHUB_TOKEN, el 'leído' no se guarda entre sesiones.")
     if limpiar:
         with st.spinner("Limpiando..."):
             limpiar_inbox_viejas()
         st.success("Inbox limpiado.")
-
     if escanear:
         with st.spinner(f"Buscando en {reg}..."):
             _, n_nuevas = escanear_y_actualizar_inbox(reg)
-        st.success(f"✅ {n_nuevas} noticias nuevas agregadas a la bandeja.")
+        st.success(f"✅ {n_nuevas} noticias nuevas en la bandeja.")
 
-    # Mostrar la bandeja: noticias de la región, no descartadas, dentro de ventana
     inbox = cargar_inbox()
     if inbox.empty:
-        st.info("Bandeja vacía. Hacé clic en 'Buscar noticias nuevas' para empezar.")
+        st.info("Bandeja vacía. Hacé clic en 'Buscar noticias nuevas'.")
     else:
-        # Filtrar por región y no descartadas
         df_reg = inbox[(inbox["region"] == reg) & (inbox["descartada"] != True) & (inbox["descartada"] != "True")]
         activas = []
         for _, row in df_reg.iterrows():
@@ -454,23 +527,18 @@ if menu == "📥 Bandeja de Noticias":
                 dt = None
             if es_dentro_ventana(dt):
                 activas.append({"id": row["id"], "titulo": row["titulo"], "link": row["link"], "dt": dt})
-
         if not activas:
             st.info(f"No hay noticias activas en {reg}. Buscá nuevas o probá otra región.")
         else:
-            # Ordenar por IA (relevancia) y luego mostrar
             with st.spinner("Ordenando por relevancia..."):
                 orden, _ = ia_curar_inbox(activas, REGION_CONTEXTO[reg])
-            # Aplicar orden de IA, los que no estén van al final
-            indices_ordenados = [i for i in orden if i < len(activas)]
+            indices = [i for i in orden if i < len(activas)]
             for i in range(len(activas)):
-                if i not in indices_ordenados:
-                    indices_ordenados.append(i)
-
+                if i not in indices:
+                    indices.append(i)
             st.caption(f"📬 {len(activas)} noticias en la bandeja de {reg}")
             st.divider()
-
-            for idx in indices_ordenados:
+            for idx in indices:
                 n = activas[idx]
                 clase_tag, texto_tag, _ = etiqueta_tiempo(n["dt"])
                 clase_card = "news-card"
@@ -480,22 +548,53 @@ if menu == "📥 Bandeja de Noticias":
                     clase_card += " news-madrugada"
                 claves = detectar_palabras_clave(n["titulo"])
                 alerta = " 🚨 " + ", ".join(claves).upper() if claves else ""
-
-                col_news, col_btn = st.columns([5, 1])
-                with col_news:
+                col_n, col_b = st.columns([5, 1])
+                with col_n:
                     st.markdown(f"""<div class="{clase_card}">
                         <span class="tag-tiempo {clase_tag}">{texto_tag}</span>{alerta}<br>
                         <a href="{n['link']}" target="_blank" style="font-size:16px; font-weight:600;">{n['titulo']}</a>
                     </div>""", unsafe_allow_html=True)
-                with col_btn:
-                    if st.button("✓ Leída", key=f"desc_{n['id']}", use_container_width=True):
+                with col_b:
+                    if st.button("✓ Leída", key=f"d_{n['id']}", use_container_width=True):
                         descartar_noticia(n["id"])
                         st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: RADAR DE MENCIONES
+#  TENDENCIAS
 # ══════════════════════════════════════════════════════════════════════════════
+elif menu == "🔥 Tendencias (Triple Respaldo)":
+    st.header("🔥 Tendencias Virales de Argentina")
+    st.markdown("**Triple respaldo**: Trends24 → GetDayTrends → Búsqueda web IA. Si las 3 fallan, avisa — nunca inventa ni tira datos viejos.")
+    if st.button("Escanear Tendencias Ahora", use_container_width=True):
+        if not ANTHROPIC_API_KEY:
+            st.error("Falta la API key de Anthropic.")
+        else:
+            with st.spinner("Probando fuentes: Trends24 → GetDayTrends → Web IA"):
+                trends_raw, fuente = obtener_tendencias_con_respaldo()
+            if not trends_raw:
+                st.error("❌ Las 3 fuentes fallaron. No hay datos ahora. Probá en unos minutos.")
+            else:
+                st.success(f"✅ Datos desde: **{fuente}**")
+                with st.spinner("Filtrando ruido y analizando ángulo político..."):
+                    filtrados, err = ia_filtrar_tendencias(trends_raw, fuente)
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"### 🌐 Raw — {fuente}")
+                    for t in trends_raw[:15]:
+                        st.markdown(f"- {t}")
+                with c2:
+                    st.markdown("### 🤖 Curaduría Política IA")
+                    if err or not filtrados:
+                        st.info("Hoy la agenda viral es puro deporte/farándula.")
+                    else:
+                        for u in filtrados:
+                            st.success(f"**{u.get('tema','')}** · {emoji_nivel(u.get('nivel',''))}")
+                            st.markdown(f"💡 {u.get('angulo','')}")
+                            st.divider()
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  RADAR DE MENCIONES
+# ══════════════════════════════════════════════════════════════════════════════
 elif menu == "🎯 Radar de Menciones":
     st.header("🎯 Radar de Menciones")
     rival = st.text_input("Nombre o palabra clave:", placeholder="Ej: Jorge Macri, jubilados...")
@@ -505,9 +604,7 @@ elif menu == "🎯 Radar de Menciones":
             feed = feedparser.parse(url)
             items = []
             for entry in feed.entries[:15]:
-                dt = parse_fecha(entry)
-                if es_dentro_ventana(dt) or True:  # menciones: mostramos aunque sean de +10hs
-                    items.append({"titulo": entry.get("title","").strip(), "link": entry.get("link","#"), "dt": dt})
+                items.append({"titulo": entry.get("title","").strip(), "link": entry.get("link","#"), "dt": parse_fecha(entry)})
         if not items:
             st.warning(f"No se encontraron menciones de {rival}.")
         else:
@@ -517,9 +614,8 @@ elif menu == "🎯 Radar de Menciones":
                 st.markdown(f"🔸 [{n['titulo']}]({n['link']}) · *{texto_tag}*")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: PREDICCIÓN Y AGENDA
+#  PREDICCIÓN Y AGENDA
 # ══════════════════════════════════════════════════════════════════════════════
-
 elif menu == "🔮 Predicción y Agenda":
     st.header("🔮 Calendario de Agenda y Predicción")
     if st.button("Generar Calendario", use_container_width=True):
@@ -538,15 +634,13 @@ elif menu == "🔮 Predicción y Agenda":
                         continue
                 contexto_texto = "\n".join([f"- {t}" for t in noticias_ctx if t])
             if not contexto_texto:
-                st.warning("No hay noticias frescas para armar la agenda.")
+                st.warning("No hay noticias frescas para la agenda.")
             else:
                 prompt = f"""Sos secretario de inteligencia política. Titulares de hoy:
 {contexto_texto}
-
 TAREA 1: Detectá eventos futuros (sesiones, paros, marchas, debates).
 TAREA 2: Deducí 3 ejes de conflicto de la semana.
-Devolvé SOLO JSON sin markdown:
-{{"agenda_concreta": [{{"tiempo": "cuándo", "evento": "qué", "explicacion": "por qué importa"}}], "ejes_estrategicos": [{{"titulo": "eje", "conflicto": "qué pasa", "tip": "qué hacer"}}]}}"""
+Devolvé SOLO JSON sin markdown: {{"agenda_concreta": [{{"tiempo": "cuándo", "evento": "qué", "explicacion": "por qué importa"}}], "ejes_estrategicos": [{{"titulo": "eje", "conflicto": "qué pasa", "tip": "qué hacer"}}]}}"""
                 try:
                     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
                     msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500,
@@ -572,9 +666,8 @@ Devolvé SOLO JSON sin markdown:
                     st.error(f"Error: {str(e)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: EVALUADOR DE CONTENIDO
+#  EVALUADOR DE CONTENIDO
 # ══════════════════════════════════════════════════════════════════════════════
-
 elif menu == "🤖 Evaluador de Contenido":
     st.header("🤖 Evaluador Estratégico de Contenido")
     t = st.text_area("Pegá el borrador:", height=150)
@@ -598,11 +691,11 @@ Devolvé SOLO JSON sin markdown: {{"score": 0-100, "veredicto": "frase", "fortal
                         elif score >= 50: st.warning(f"⚠️ Score: {score}/100 — {data.get('veredicto','')}")
                         else: st.error(f"❌ Score: {score}/100 — {data.get('veredicto','')}")
                         st.info(f"📱 Plataforma ideal: {data.get('plataforma_ideal','')}")
-                        c1, c2 = st.columns(2)
-                        with c1:
+                        cc1, cc2 = st.columns(2)
+                        with cc1:
                             st.markdown("👍 **Fuertes:**")
                             for f in data.get("fortalezas", []): st.markdown(f"- {f}")
-                        with c2:
+                        with cc2:
                             st.markdown("🔧 **A mejorar:**")
                             for m in data.get("mejoras", []): st.markdown(f"- {m}")
                     else:
@@ -611,21 +704,16 @@ Devolvé SOLO JSON sin markdown: {{"score": 0-100, "veredicto": "frase", "fortal
                     st.error(f"Error: {str(e)}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: LABORATORIO DE AUDIENCIAS (Twitter + Instagram, persistente)
+#  LABORATORIO DE AUDIENCIAS (Twitter + Instagram, foto, persistente)
 # ══════════════════════════════════════════════════════════════════════════════
-
 elif menu == "🧠 Laboratorio de Audiencias":
     st.header("🧠 Laboratorio de Perfiles y Audiencias")
-    st.markdown("Memoria permanente: cargás un perfil una vez y queda guardado. Vas actualizando mes a mes y viendo la evolución.")
-
-    COLS_AUD = ["Fecha", "Perfil", "Cargo", "Organización", "Alianzas", "Plataforma",
-                "Formato", "Tema/Texto", "Alcance", "Interacciones", "Engagement (%)"]
-
-    # Cargar datos guardados
+    st.markdown("Memoria permanente: cargás un perfil y queda guardado. Actualizás mes a mes y ves la evolución.")
+    COLS_AUD = ["Fecha","Perfil","Cargo","Organización","Alianzas","Plataforma",
+                "Formato","Tema/Texto","Alcance","Interacciones","Engagement (%)"]
     df_aud, _ = cargar_csv_github(PATH_AUDIENCIA)
     if df_aud.empty:
         df_aud = pd.DataFrame(columns=COLS_AUD)
-
     if GITHUB_TOKEN and GITHUB_REPO:
         st.caption("💾 Memoria permanente activa")
     else:
@@ -633,7 +721,6 @@ elif menu == "🧠 Laboratorio de Audiencias":
 
     tab_tw, tab_ig = st.tabs(["𝕏  Twitter (X)", "📸  Instagram"])
 
-    # ── TWITTER ──
     with tab_tw:
         st.markdown("### Cargar registro de Twitter/X")
         c1, c2 = st.columns(2)
@@ -643,31 +730,29 @@ elif menu == "🧠 Laboratorio de Audiencias":
             org_tw = st.text_input("🏢 Organización:", key="tw_org", placeholder="Unión por la Patria")
             ali_tw = st.text_input("🤝 Aliado/a a:", key="tw_ali", placeholder="Kirchnerismo")
         with c2:
-            tema_tw = st.text_area("✍️ Tema/Texto del tweet:", key="tw_tema", height=120)
-            alc_tw = st.number_input("Impresiones/Alcance", min_value=0, value=0, key="tw_alc")
-            int_tw = st.number_input("Interacciones", min_value=0, value=0, key="tw_int")
-
+            img_tw = st.file_uploader("📸 Captura del tweet (opcional)", type=["png","jpg","jpeg"], key="tw_img")
+            if img_tw:
+                st.image(img_tw, caption="Captura cargada", use_container_width=True)
+            tema_tw = st.text_area("✍️ Tema/Texto del tweet:", key="tw_tema", height=100)
+            ca1, ca2 = st.columns(2)
+            with ca1:
+                alc_tw = st.number_input("Impresiones", min_value=0, value=0, key="tw_alc")
+            with ca2:
+                int_tw = st.number_input("Interacciones", min_value=0, value=0, key="tw_int")
         if st.button("💾 Guardar registro Twitter", use_container_width=True):
             if perfil_tw.strip() and alc_tw > 0 and tema_tw.strip():
                 eng = round((int_tw / alc_tw) * 100, 2)
-                nuevo = {
-                    "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                    "Perfil": perfil_tw.strip(), "Cargo": cargo_tw.strip(),
-                    "Organización": org_tw.strip(), "Alianzas": ali_tw.strip(),
-                    "Plataforma": "Twitter", "Formato": "Tweet",
-                    "Tema/Texto": tema_tw.strip(), "Alcance": alc_tw,
-                    "Interacciones": int_tw, "Engagement (%)": eng,
-                }
+                nuevo = {"Fecha": datetime.now().strftime("%Y-%m-%d"), "Perfil": perfil_tw.strip(),
+                         "Cargo": cargo_tw.strip(), "Organización": org_tw.strip(), "Alianzas": ali_tw.strip(),
+                         "Plataforma": "Twitter", "Formato": "Tweet", "Tema/Texto": tema_tw.strip(),
+                         "Alcance": alc_tw, "Interacciones": int_tw, "Engagement (%)": eng}
                 df_aud = pd.concat([df_aud, pd.DataFrame([nuevo])], ignore_index=True)
                 ok, msg = guardar_csv_github(PATH_AUDIENCIA, df_aud, f"Registro TW {perfil_tw}")
-                if ok:
-                    st.success(f"✅ Guardado permanente. Engagement: {eng}%")
-                else:
-                    st.warning(f"Falló el guardado: {msg}")
+                if ok: st.success(f"✅ Guardado permanente. Engagement: {eng}%")
+                else: st.warning(f"Falló: {msg}")
             else:
                 st.error("Completá perfil, texto y alcance.")
 
-    # ── INSTAGRAM ──
     with tab_ig:
         st.markdown("### Cargar registro de Instagram")
         c1, c2 = st.columns(2)
@@ -677,38 +762,34 @@ elif menu == "🧠 Laboratorio de Audiencias":
             org_ig = st.text_input("🏢 Organización:", key="ig_org", placeholder="Unión por la Patria")
             ali_ig = st.text_input("🤝 Aliado/a a:", key="ig_ali", placeholder="Kirchnerismo")
         with c2:
-            formato_ig = st.selectbox("📐 Formato:", ["Reel", "Carrusel de fotos", "Imagen fija", "Historia"], key="ig_fmt")
+            img_ig = st.file_uploader("📸 Captura del posteo (opcional)", type=["png","jpg","jpeg"], key="ig_img")
+            if img_ig:
+                st.image(img_ig, caption="Captura cargada", use_container_width=True)
+            formato_ig = st.selectbox("📐 Formato:", ["Reel","Carrusel de fotos","Imagen fija","Historia"], key="ig_fmt")
             tema_ig = st.text_area("✍️ Tema/Descripción:", key="ig_tema", height=80)
-            alc_ig = st.number_input("Alcance", min_value=0, value=0, key="ig_alc")
-            int_ig = st.number_input("Interacciones", min_value=0, value=0, key="ig_int")
-
+            cb1, cb2 = st.columns(2)
+            with cb1:
+                alc_ig = st.number_input("Alcance", min_value=0, value=0, key="ig_alc")
+            with cb2:
+                int_ig = st.number_input("Interacciones", min_value=0, value=0, key="ig_int")
         if st.button("💾 Guardar registro Instagram", use_container_width=True):
             if perfil_ig.strip() and alc_ig > 0 and tema_ig.strip():
                 eng = round((int_ig / alc_ig) * 100, 2)
-                nuevo = {
-                    "Fecha": datetime.now().strftime("%Y-%m-%d"),
-                    "Perfil": perfil_ig.strip(), "Cargo": cargo_ig.strip(),
-                    "Organización": org_ig.strip(), "Alianzas": ali_ig.strip(),
-                    "Plataforma": "Instagram", "Formato": formato_ig,
-                    "Tema/Texto": tema_ig.strip(), "Alcance": alc_ig,
-                    "Interacciones": int_ig, "Engagement (%)": eng,
-                }
+                nuevo = {"Fecha": datetime.now().strftime("%Y-%m-%d"), "Perfil": perfil_ig.strip(),
+                         "Cargo": cargo_ig.strip(), "Organización": org_ig.strip(), "Alianzas": ali_ig.strip(),
+                         "Plataforma": "Instagram", "Formato": formato_ig, "Tema/Texto": tema_ig.strip(),
+                         "Alcance": alc_ig, "Interacciones": int_ig, "Engagement (%)": eng}
                 df_aud = pd.concat([df_aud, pd.DataFrame([nuevo])], ignore_index=True)
                 ok, msg = guardar_csv_github(PATH_AUDIENCIA, df_aud, f"Registro IG {perfil_ig}")
-                if ok:
-                    st.success(f"✅ Guardado permanente. Engagement: {eng}%")
-                else:
-                    st.warning(f"Falló el guardado: {msg}")
+                if ok: st.success(f"✅ Guardado permanente. Engagement: {eng}%")
+                else: st.warning(f"Falló: {msg}")
             else:
                 st.error("Completá perfil, descripción y alcance.")
 
     st.divider()
-
-    # ── HISTORIAL Y ANÁLISIS ──
     if not df_aud.empty:
         st.markdown("### 📚 Historial guardado")
-        st.dataframe(df_aud[["Fecha", "Perfil", "Plataforma", "Formato", "Engagement (%)"]], use_container_width=True)
-
+        st.dataframe(df_aud[["Fecha","Perfil","Plataforma","Formato","Engagement (%)"]], use_container_width=True)
         st.markdown("### 📊 Análisis Cruzado por Perfil")
         perfiles = sorted(set(df_aud["Perfil"].dropna().tolist()))
         if perfiles:
@@ -753,36 +834,32 @@ elif menu == "🧠 Laboratorio de Audiencias":
                                     st.plotly_chart(fig, use_container_width=True)
                         except ImportError:
                             st.warning("Agregá 'plotly' al requirements.txt para ver los gráficos.")
-
                         st.markdown(f"""<div class="insight-box">
                             <b>𝕏 Twitter:</b> {data.get('insight_twitter','')}<br><br>
                             <b>📸 Instagram:</b> {data.get('insight_instagram','')}<br><br>
                             <b>🎯 Recomendación cruzada:</b> {data.get('recomendacion_general','')}<br><br>
                             <b>Actitud predominante:</b> {data.get('actitud_predominante','')}
                         </div>""", unsafe_allow_html=True)
-
         with st.expander("🗑️ Borrar todo el historial"):
             if st.button("Confirmar borrado total"):
-                guardar_csv_github(PATH_AUDIENCIA, pd.DataFrame(columns=COLS_AUD), "Borrado total audiencia")
+                guardar_csv_github(PATH_AUDIENCIA, pd.DataFrame(columns=COLS_AUD), "Borrado total")
                 st.success("Historial borrado.")
                 st.rerun()
     else:
         st.info("Todavía no hay registros guardados. Cargá el primero arriba.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PÁGINA: ALERTAS Y REPORTES
+#  ALERTAS Y REPORTES
 # ══════════════════════════════════════════════════════════════════════════════
-
 elif menu == "📧 Alertas y Reportes":
     st.header("📧 Centro de Envíos y Alertas")
-
-    st.markdown("### 1. Escáner de Palabras Clave + Mail")
+    st.markdown("### Escáner de Palabras Clave + Mail")
     st.caption("Palabras gatillo: " + ", ".join(PALABRAS_CLAVE))
     if st.button("Escanear todas las regiones y enviar alertas", use_container_width=True):
         if not GMAIL_APP_PASSWORD:
             st.error("Falta la contraseña de Gmail en los Secrets.")
         else:
-            with st.spinner("Rastreando palabras clave en todos los feeds..."):
+            with st.spinner("Rastreando palabras clave..."):
                 alertas = []
                 for region, urls in RSS_FEEDS.items():
                     for url in urls:
@@ -790,15 +867,13 @@ elif menu == "📧 Alertas y Reportes":
                             feed = feedparser.parse(url)
                             for e in feed.entries[:5]:
                                 titulo = e.get("title","").strip()
-                                dt = parse_fecha(e)
-                                if not es_dentro_ventana(dt):
+                                if not es_dentro_ventana(parse_fecha(e)):
                                     continue
                                 claves = detectar_palabras_clave(titulo)
                                 if claves:
                                     alertas.append((titulo, e.get("link","#"), claves))
                         except Exception:
                             continue
-            # quitar duplicados
             seen, unicas = set(), []
             for a in alertas:
                 if a[0] not in seen:
@@ -815,7 +890,5 @@ elif menu == "📧 Alertas y Reportes":
                         st.markdown(f"🔸 [{t}]({l}) — **{', '.join(c).upper()}**")
                 else:
                     st.error(f"❌ {msg}")
-
     st.divider()
-    st.markdown("### 2. Sobre el monitoreo automático")
-    st.info("""**Próximo paso (otra sesión):** un bot que corra solo cada 15 min en un servidor externo (cron-job.org o GitHub Actions) y te avise por Telegram o Mail cuando salte una palabra clave o tendencia, sin que nadie tenga que abrir la app. El código actual ya queda preparado para conectarse a eso.""")
+    st.info("""**Próximo paso (otra sesión):** un bot que corra solo cada 15 min en un servidor externo y te avise por Telegram o Mail cuando salte una palabra clave, sin que nadie abra la app.""")
