@@ -511,6 +511,7 @@ if menu == "📥 Bandeja de Noticias":
         with st.spinner(f"Buscando en {reg}..."):
             _, n_nuevas = escanear_y_actualizar_inbox(reg)
         st.success(f"✅ {n_nuevas} noticias nuevas en la bandeja.")
+        st.rerun()
 
     inbox = cargar_inbox()
     if inbox.empty:
