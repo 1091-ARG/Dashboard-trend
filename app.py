@@ -65,7 +65,7 @@ PALABRAS_CLAVE = ["jubilados", "femicidio", "tragedia", "muerte", "protesta",
                   "corrupción", "corrupcion", "paro", "represión", "represion",
                   "escándalo", "inundación", "adorni", "presupuesto"]
 
-VENTANA_HORAS = 10
+VENTANA_HORAS = 15
 TOP_NOTICIAS = 15
 PATH_INBOX = "noticias_inbox.csv"
 PATH_AUDIENCIA = "datos_audiencia.csv"
@@ -110,6 +110,9 @@ RSS_FEEDS = {
         "https://www.infobae.com/politica/feed/",
         "https://www.pagina12.com.ar/rss/secciones/el-pais/notas",
         "https://www.ambito.com/rss/politica.xml",
+        "https://news.google.com/rss/search?q=site:clarin.com+pol%C3%ADtica&hl=es-419&gl=AR&ceid=AR:es",
+        "https://news.google.com/rss/search?q=site:lanacion.com.ar+pol%C3%ADtica&hl=es-419&gl=AR&ceid=AR:es",
+        "https://news.google.com/rss/search?q=site:eldestapeweb.com&hl=es-419&gl=AR&ceid=AR:es",
     ],
 }
 REGION_CONTEXTO = {
@@ -165,6 +168,43 @@ def guardar_csv_github(path, df, mensaje):
 # ══ FUNCIONES BASE ══
 def hash_noticia(titulo):
     return hashlib.md5(titulo.encode("utf-8")).hexdigest()[:12]
+
+def leer_feed(url):
+    """Lee un feed RSS. Si el acceso directo falla o viene vacío (bloqueo 403 a servidores),
+    reintenta a través de un proxy que se hace pasar por navegador."""
+    import urllib.parse
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+    # Intento 1: directo
+    try:
+        r = requests.get(url, headers=headers, timeout=12)
+        if r.status_code == 200:
+            feed = feedparser.parse(r.content)
+            if feed.entries:
+                return feed
+    except Exception:
+        pass
+    # Intento 2: vía proxy allorigins (destraba el 403 en la nube)
+    try:
+        proxy_url = "https://api.allorigins.win/raw?url=" + urllib.parse.quote(url, safe="")
+        r = requests.get(proxy_url, headers=headers, timeout=20)
+        if r.status_code == 200:
+            feed = feedparser.parse(r.content)
+            if feed.entries:
+                return feed
+    except Exception:
+        pass
+    # Intento 3: proxy corsproxy
+    try:
+        proxy_url = "https://corsproxy.io/?url=" + urllib.parse.quote(url, safe="")
+        r = requests.get(proxy_url, headers=headers, timeout=20)
+        if r.status_code == 200:
+            feed = feedparser.parse(r.content)
+            if feed.entries:
+                return feed
+    except Exception:
+        pass
+    # Si todo falla, devolver feed vacío
+    return feedparser.parse("")
 
 def parse_fecha(entry):
     for campo in ("published", "updated"):
@@ -241,7 +281,7 @@ def escanear_y_actualizar_inbox(region):
     nuevas = []
     for url in RSS_FEEDS[region]:
         try:
-            feed = feedparser.parse(url)
+            feed = leer_feed(url)
             for entry in feed.entries[:12]:
                 titulo = entry.get("title", "").strip()
                 if not titulo:
@@ -520,14 +560,21 @@ if menu == "📥 Bandeja de Noticias":
         df_reg = inbox[(inbox["region"] == reg) & (inbox["descartada"] != True) & (inbox["descartada"] != "True")]
         activas = []
         for _, row in df_reg.iterrows():
-            try:
-                dt = datetime.fromisoformat(row["fecha_pub"]) if row["fecha_pub"] else None
-                if dt and dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-            except Exception:
-                dt = None
-            if es_dentro_ventana(dt):
-                activas.append({"id": row["id"], "titulo": row["titulo"], "link": row["link"], "dt": dt})
+            fecha_raw = row["fecha_pub"]
+            # Manejar NaN, vacío, o fecha válida
+            if pd.isna(fecha_raw) or str(fecha_raw).strip() == "":
+                dt = None  # sin fecha → se muestra igual
+            else:
+                try:
+                    dt = datetime.fromisoformat(str(fecha_raw))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    # Si tiene fecha pero está fuera de ventana, la salteamos
+                    if not es_dentro_ventana(dt):
+                        continue
+                except Exception:
+                    dt = None  # fecha rota → se muestra igual
+            activas.append({"id": row["id"], "titulo": row["titulo"], "link": row["link"], "dt": dt})
         if not activas:
             st.info(f"No hay noticias activas en {reg}. Buscá nuevas o probá otra región.")
         else:
@@ -602,7 +649,7 @@ elif menu == "🎯 Radar de Menciones":
     if st.button("Rastrear", use_container_width=True) and rival.strip():
         url = f"https://news.google.com/rss/search?q=%22{rival.replace(' ', '+')}%22&hl=es-419&gl=AR&ceid=AR:es"
         with st.spinner(f"Buscando sobre {rival}..."):
-            feed = feedparser.parse(url)
+            feed = leer_feed(url)
             items = []
             for entry in feed.entries[:15]:
                 items.append({"titulo": entry.get("title","").strip(), "link": entry.get("link","#"), "dt": parse_fecha(entry)})
@@ -628,7 +675,7 @@ elif menu == "🔮 Predicción y Agenda":
                 noticias_ctx = []
                 for url in urls_ctx:
                     try:
-                        feed = feedparser.parse(url)
+                        feed = leer_feed(url)
                         for e in feed.entries[:6]:
                             noticias_ctx.append(e.get("title","").strip())
                     except Exception:
@@ -865,7 +912,7 @@ elif menu == "📧 Alertas y Reportes":
                 for region, urls in RSS_FEEDS.items():
                     for url in urls:
                         try:
-                            feed = feedparser.parse(url)
+                            feed = leer_feed(url)
                             for e in feed.entries[:5]:
                                 titulo = e.get("title","").strip()
                                 if not es_dentro_ventana(parse_fecha(e)):
