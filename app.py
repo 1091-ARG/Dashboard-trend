@@ -15,59 +15,58 @@ from email.utils import parsedate_to_datetime
 
 st.set_page_config(page_title="Centro de Monitoreo", layout="wide", initial_sidebar_state="expanded")
 
+if "db_rendimiento" not in st.session_state:
+    st.session_state["db_rendimiento"] = []
+
 st.markdown("""
 <style>
-    .stApp { background-color: #F8F9FA; color: #1E1E1E; }
+    .stApp { background-color: #F8F9FA; color: #1E1E1E; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E0E0E0; }
     h1, h2, h3, h4 { color: #1E1E1E !important; font-weight: 600; }
-    p, span, div, label { color: #333333 !important; }
+    p, span, div { color: #333333 !important; }
     a { color: #2B547E !important; font-weight: 500; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .stButton > button { background-color: #2C3E50 !important; color: #FFFFFF !important; font-weight: bold !important; border-radius: 6px !important; border: none !important; }
     .stButton > button * { color: #FFFFFF !important; }
     .stButton > button:hover { background-color: #1A252F !important; }
-    .stTextInput input, .stTextArea textarea, .stNumberInput input { background-color: #FFFFFF !important; color: #1E1E1E !important; }
+    .stTextInput input, .stTextArea textarea, .stNumberInput input { background-color: #FFFFFF !important; color: #1E1E1E !important; border: 1px solid #CCCCCC !important; }
     hr { border-color: #E0E0E0; }
-    .sidebar-title { font-size: 20px; font-weight: bold; color: #2C3E50; padding-bottom: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+    .sidebar-title { font-size: 22px; font-weight: bold; color: #2C3E50; padding-bottom: 20px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
     .news-card { background-color: #FFFFFF; padding: 14px 18px; border-radius: 10px; border-left: 4px solid #2C3E50; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 10px; }
     .news-nuevo { border-left-color: #c0392b !important; background-color: #fff8f7 !important; }
     .news-madrugada { border-left-color: #8e44ad !important; background-color: #faf7fc !important; }
-    .tag-tiempo { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; display: inline-block; }
+    .tag { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; display: inline-block; margin-bottom: 4px; }
     .tag-nuevo { background: #fdecea; color: #c0392b !important; }
     .tag-madrugada { background: #f3eafa; color: #8e44ad !important; }
     .tag-normal { background: #eef0f2; color: #555 !important; }
     .perfil-header { background: linear-gradient(135deg, #2C3E50, #3d5a73); color: white; padding: 20px 24px; border-radius: 12px; margin-bottom: 20px; }
-    .perfil-nombre { font-size: 22px; font-weight: 700; color: white !important; margin: 0; }
+    .perfil-nombre { font-size: 22px; font-weight: 700; color: white !important; }
     .perfil-meta { font-size: 13px; color: #b0c4d8 !important; margin-top: 4px; }
     .insight-box { background: #f0f7ff; border-left: 4px solid #2B547E; padding: 16px 20px; border-radius: 8px; margin-top: 16px; }
+    .evento-card { background-color: #FFFFFF; padding: 15px; border-radius: 8px; border-left: 5px solid #e89a3c; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── CREDENCIALES ──
-try:
-    ANTHROPIC_API_KEY = st.secrets["ANTHROPIC_API_KEY"]
-except:
-    ANTHROPIC_API_KEY = ""
+try: ANTHROPIC_API_KEY = st.secrets["ANTHROPIC_API_KEY"]
+except: ANTHROPIC_API_KEY = ""
 try:
     GMAIL_USER = st.secrets["GMAIL_USER"]
     GMAIL_APP_PASSWORD = st.secrets["GMAIL_APP_PASSWORD"]
     MAIL_DESTINO = st.secrets.get("MAIL_DESTINO", "correo@ejemplo.com")
-except:
-    GMAIL_USER = GMAIL_APP_PASSWORD = ""
-    MAIL_DESTINO = "correo@ejemplo.com"
+except: GMAIL_USER = GMAIL_APP_PASSWORD = ""; MAIL_DESTINO = "correo@ejemplo.com"
 try:
     GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
     GITHUB_REPO = st.secrets.get("GITHUB_REPO", "")
-except:
-    GITHUB_TOKEN = GITHUB_REPO = ""
+except: GITHUB_TOKEN = GITHUB_REPO = ""
 
-PALABRAS_CLAVE = ["jubilados", "femicidio", "tragedia", "muerte", "protesta",
-                  "corrupción", "corrupcion", "paro", "represión", "represion",
-                  "escándalo", "inundación", "adorni", "presupuesto"]
+PALABRAS_CLAVE = ["jubilados", "femicidio", "terremoto", "tragedia", "muerte", "protesta",
+                  "corrupción", "corrupcion", "paro", "represión", "represion", "escándalo",
+                  "inundación", "adorni", "presupuesto", "cristina", "milei"]
 
-VENTANA_HORAS = 15
+CUTOFF_HORAS = 15
 TOP_NOTICIAS = 15
-PATH_INBOX = "noticias_inbox.csv"
+PATH_INBOX   = "noticias_inbox.csv"
 PATH_AUDIENCIA = "datos_audiencia.csv"
 
 RSS_FEEDS = {
@@ -105,6 +104,7 @@ RSS_FEEDS = {
     "CABA y Rosca": [
         "https://news.google.com/rss/search?q=Legislatura+Buenos+Aires+pol%C3%ADtica&hl=es-419&gl=AR&ceid=AR:es",
         "https://news.google.com/rss/search?q=site:lapoliticaonline.com+CABA&hl=es-419&gl=AR&ceid=AR:es",
+        "https://news.google.com/rss/search?q=site:letrap.com.ar&hl=es-419&gl=AR&ceid=AR:es",
     ],
     "POLÍTICA NACIONAL": [
         "https://www.infobae.com/politica/feed/",
@@ -127,7 +127,7 @@ REGION_CONTEXTO = {
     "POLÍTICA NACIONAL": "la política nacional argentina",
 }
 
-# ══ FUNCIONES GITHUB (memoria permanente) ══
+# ══ FUNCIONES GITHUB ══
 def github_headers():
     return {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
@@ -165,48 +165,9 @@ def guardar_csv_github(path, df, mensaje):
     except Exception as e:
         return False, str(e)
 
-# ══ FUNCIONES BASE ══
-def hash_noticia(titulo):
-    return hashlib.md5(titulo.encode("utf-8")).hexdigest()[:12]
-
-def leer_feed(url):
-    """Lee un feed RSS. Si el acceso directo falla o viene vacío (bloqueo 403 a servidores),
-    reintenta a través de un proxy que se hace pasar por navegador."""
-    import urllib.parse
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
-    # Intento 1: directo
-    try:
-        r = requests.get(url, headers=headers, timeout=12)
-        if r.status_code == 200:
-            feed = feedparser.parse(r.content)
-            if feed.entries:
-                return feed
-    except Exception:
-        pass
-    # Intento 2: vía proxy allorigins (destraba el 403 en la nube)
-    try:
-        proxy_url = "https://api.allorigins.win/raw?url=" + urllib.parse.quote(url, safe="")
-        r = requests.get(proxy_url, headers=headers, timeout=20)
-        if r.status_code == 200:
-            feed = feedparser.parse(r.content)
-            if feed.entries:
-                return feed
-    except Exception:
-        pass
-    # Intento 3: proxy corsproxy
-    try:
-        proxy_url = "https://corsproxy.io/?url=" + urllib.parse.quote(url, safe="")
-        r = requests.get(proxy_url, headers=headers, timeout=20)
-        if r.status_code == 200:
-            feed = feedparser.parse(r.content)
-            if feed.entries:
-                return feed
-    except Exception:
-        pass
-    # Si todo falla, devolver feed vacío
-    return feedparser.parse("")
-
-def parse_fecha(entry):
+# ══ FUNCIONES DE NOTICIAS — igual que el original que funcionaba ══
+def es_reciente(entry):
+    """Igual al original: devuelve True si no hay fecha (nunca descarta por falta de fecha)."""
     for campo in ("published", "updated"):
         raw = entry.get(campo, "")
         if not raw:
@@ -215,30 +176,37 @@ def parse_fecha(entry):
             dt = parsedate_to_datetime(raw)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+            return (datetime.now(timezone.utc) - dt) <= timedelta(hours=CUTOFF_HORAS)
         except Exception:
             continue
-    return None
+    return True  # sin fecha → se muestra siempre
 
-def etiqueta_tiempo(dt_pub):
-    if dt_pub is None:
-        return "tag-normal", "Sin fecha", 999999
-    ahora = datetime.now(timezone.utc)
-    minutos = (ahora - dt_pub).total_seconds() / 60
-    horas = minutos / 60
-    hora_local = (dt_pub - timedelta(hours=3)).hour
-    es_madrugada = 0 <= hora_local < 7
-    if minutos < 60:
-        return "tag-nuevo", f"Hace {int(minutos)} min · 🔥 NUEVO", minutos
-    elif es_madrugada and dt_pub.date() == (ahora - timedelta(hours=3)).date():
-        return "tag-madrugada", f"🌙 Madrugada · Hace {int(horas)}h", minutos
-    else:
-        return "tag-normal", f"Hace {int(horas)}h", minutos
-
-def es_dentro_ventana(dt_pub):
-    if dt_pub is None:
-        return True
-    return (datetime.now(timezone.utc) - dt_pub) <= timedelta(hours=VENTANA_HORAS)
+def obtener_noticias_crudas(urls, max_por_feed=8):
+    """Exactamente igual al original que funcionaba: feedparser.parse(url) directo."""
+    noticias = []
+    for url in urls:
+        try:
+            feed = feedparser.parse(url)
+            count = 0
+            for entry in feed.entries:
+                if count >= max_por_feed:
+                    break
+                if not es_reciente(entry):
+                    continue
+                noticias.append({
+                    "titulo": entry.get("title", "Sin título").strip(),
+                    "link": entry.get("link", "#"),
+                    "fecha_pub": entry.get("published", "") or entry.get("updated", ""),
+                })
+                count += 1
+        except Exception:
+            continue
+    seen, unicas = set(), []
+    for n in noticias:
+        if n["titulo"] not in seen:
+            seen.add(n["titulo"])
+            unicas.append(n)
+    return unicas
 
 def detectar_palabras_clave(titulo):
     t = titulo.lower()
@@ -254,6 +222,37 @@ def extraer_json_seguro(texto):
         pass
     return None
 
+def hash_noticia(titulo):
+    return hashlib.md5(titulo.encode("utf-8")).hexdigest()[:12]
+
+def get_dt_pub(fecha_raw):
+    """Parsea fecha de publicación de un string. Devuelve datetime o None."""
+    if not fecha_raw or pd.isna(fecha_raw) if hasattr(pd, 'isna') else not fecha_raw:
+        return None
+    try:
+        dt = parsedate_to_datetime(str(fecha_raw))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+def etiqueta_tiempo(fecha_raw):
+    """Genera tag visual según antigüedad y franja horaria."""
+    dt = get_dt_pub(fecha_raw)
+    if dt is None:
+        return "tag-normal", "Sin fecha"
+    ahora = datetime.now(timezone.utc)
+    minutos = (ahora - dt).total_seconds() / 60
+    horas = minutos / 60
+    hora_local = (dt - timedelta(hours=3)).hour
+    if minutos < 60:
+        return "tag-nuevo", f"🔥 Hace {int(minutos)} min · NUEVO"
+    elif 0 <= hora_local < 7:
+        return "tag-madrugada", f"🌙 Madrugada · Hace {int(horas)}h"
+    else:
+        return "tag-normal", f"Hace {int(horas)}h"
+
 def enviar_mail(asunto, cuerpo_html):
     if not GMAIL_USER or not GMAIL_APP_PASSWORD:
         return False, "Faltan credenciales de Gmail."
@@ -268,42 +267,31 @@ def enviar_mail(asunto, cuerpo_html):
     except Exception as e:
         return False, str(e)
 
-# ══ INBOX (bandeja con descarte persistente) ══
+# ══ INBOX CON DESCARTE PERSISTENTE ══
 def cargar_inbox():
     df, _ = cargar_csv_github(PATH_INBOX)
     if df.empty:
         return pd.DataFrame(columns=["id","titulo","link","region","fecha_pub","descartada"])
     return df
 
-def escanear_y_actualizar_inbox(region):
+def guardar_en_inbox(region, noticias_nuevas):
+    """Agrega noticias nuevas al inbox guardado en GitHub, sin duplicar."""
     inbox = cargar_inbox()
     ids_existentes = set(inbox["id"].astype(str)) if not inbox.empty else set()
-    nuevas = []
-    for url in RSS_FEEDS[region]:
-        try:
-            feed = leer_feed(url)
-            for entry in feed.entries[:12]:
-                titulo = entry.get("title", "").strip()
-                if not titulo:
-                    continue
-                dt_pub = parse_fecha(entry)
-                if not es_dentro_ventana(dt_pub):
-                    continue
-                nid = hash_noticia(titulo)
-                if nid in ids_existentes:
-                    continue
-                ids_existentes.add(nid)
-                nuevas.append({
-                    "id": nid, "titulo": titulo, "link": entry.get("link","#"),
-                    "region": region, "fecha_pub": dt_pub.isoformat() if dt_pub else "",
-                    "descartada": False,
-                })
-        except Exception:
-            continue
-    if nuevas:
-        inbox = pd.concat([inbox, pd.DataFrame(nuevas)], ignore_index=True)
+    agregar = []
+    for n in noticias_nuevas:
+        nid = hash_noticia(n["titulo"])
+        if nid not in ids_existentes:
+            ids_existentes.add(nid)
+            agregar.append({
+                "id": nid, "titulo": n["titulo"], "link": n["link"],
+                "region": region, "fecha_pub": n.get("fecha_pub",""),
+                "descartada": False,
+            })
+    if agregar:
+        inbox = pd.concat([inbox, pd.DataFrame(agregar)], ignore_index=True)
         guardar_csv_github(PATH_INBOX, inbox, f"Inbox {region} {datetime.now().strftime('%d/%m %H:%M')}")
-    return inbox, len(nuevas)
+    return inbox, len(agregar)
 
 def descartar_noticia(nid):
     inbox = cargar_inbox()
@@ -311,31 +299,14 @@ def descartar_noticia(nid):
         inbox.loc[inbox["id"].astype(str) == str(nid), "descartada"] = True
         guardar_csv_github(PATH_INBOX, inbox, f"Leída {nid}")
 
-def limpiar_inbox_viejas():
-    inbox = cargar_inbox()
-    if inbox.empty:
-        return
-    ahora = datetime.now(timezone.utc)
-    def vigente(row):
-        try:
-            dt = datetime.fromisoformat(row["fecha_pub"])
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return (ahora - dt) <= timedelta(hours=VENTANA_HORAS)
-        except Exception:
-            return False
-    filtrada = inbox[inbox.apply(vigente, axis=1)]
-    if len(filtrada) != len(inbox):
-        guardar_csv_github(PATH_INBOX, filtrada, "Limpieza fuera de ventana")
-
 # ══ FUNCIONES IA ══
-def ia_curar_inbox(noticias_activas, contexto_region, top=TOP_NOTICIAS):
-    if not ANTHROPIC_API_KEY or not noticias_activas:
-        return list(range(len(noticias_activas))), None
-    titles = "\n".join([f"[{i}] {n['titulo']}" for i, n in enumerate(noticias_activas)])
-    prompt = f"""Sos Jefe de Redacción cubriendo {contexto_region}.
-Ordená las {top} noticias MÁS RELEVANTES políticamente (impacto, poder, conflicto, corrupción, tragedia, gestión). Descartá fútbol y farándula.
-Devolvé SOLO JSON sin markdown: {{"orden": [índices de más a menos importante]}}
+def ia_curar_regional(noticias_lista, contexto_region, top=TOP_NOTICIAS):
+    if not ANTHROPIC_API_KEY or not noticias_lista:
+        return list(range(len(noticias_lista))), None
+    titles = "\n".join([f"[{i}] {n['titulo']}" for i, n in enumerate(noticias_lista)])
+    prompt = f"""Sos Jefe de Redacción de un medio federal cubriendo {contexto_region}.
+Elegí las {top} noticias MÁS RELEVANTES políticamente. Priorizá poder provincial, corrupción, conflictos, gestión. Descartá fútbol y farándula.
+Devolvé SOLO JSON: {{"orden": [índices de más a menos importante]}}
 
 Noticias:
 {titles}"""
@@ -346,21 +317,18 @@ Noticias:
         data = extraer_json_seguro(msg.content[0].text)
         if data and "orden" in data:
             return data["orden"], None
-        return list(range(len(noticias_activas))), None
+        return list(range(len(noticias_lista))), None
     except Exception as e:
-        return list(range(len(noticias_activas))), str(e)
+        return list(range(len(noticias_lista))), str(e)
 
 def ia_analizar_perfil_cruzado(datos_twitter, datos_instagram, nombre_perfil):
     if not ANTHROPIC_API_KEY:
         return None, "Falta API key."
     prompt = f"""Sos analista de comunicación política. Perfil: {nombre_perfil}.
-DATOS TWITTER/X:
-{datos_twitter if datos_twitter else "Sin datos"}
-DATOS INSTAGRAM:
-{datos_instagram if datos_instagram else "Sin datos"}
-
-Análisis comparativo cruzado. Devolvé SOLO JSON sin markdown:
-{{"distribucion_temas": {{"Economía": %, "Derechos Sociales": %, "Seguridad": %, "Gestión/Obras": %, "Confrontación": %, "Otro": %}}, "distribucion_tono": {{"Agresivo": %, "Conciliador": %, "Constructivo": %, "Informativo": %}}, "insight_twitter": "2 oraciones", "insight_instagram": "qué formato funciona mejor, 2 oraciones", "recomendacion_general": "2-3 oraciones", "actitud_predominante": "Agresivo|Conciliador|Constructivo|Informativo"}}
+TWITTER/X: {datos_twitter if datos_twitter else "Sin datos"}
+INSTAGRAM: {datos_instagram if datos_instagram else "Sin datos"}
+Análisis comparativo. SOLO JSON:
+{{"distribucion_temas":{{"Economía":0,"Derechos Sociales":0,"Seguridad":0,"Gestión/Obras":0,"Confrontación":0,"Otro":0}},"distribucion_tono":{{"Agresivo":0,"Conciliador":0,"Constructivo":0,"Informativo":0}},"insight_twitter":"2 oraciones","insight_instagram":"qué formato funciona mejor, 2 oraciones","recomendacion_general":"2-3 oraciones","actitud_predominante":"texto"}}
 Cada distribución suma 100."""
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -511,7 +479,6 @@ def emoji_nivel(nivel):
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown('<p class="sidebar-title">CENTRO DE MONITOREO</p>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#555; font-size:13px;'>Panel de Control</p>", unsafe_allow_html=True)
     st.divider()
     menu = st.radio("", [
         "📥 Bandeja de Noticias",
@@ -526,104 +493,127 @@ with st.sidebar:
     if GITHUB_TOKEN and GITHUB_REPO:
         st.caption("💾 Memoria permanente: ACTIVA")
     else:
-        st.caption("⚠️ Configurá GITHUB_TOKEN")
-    st.caption(f"Ventana: {VENTANA_HORAS}hs · Top {TOP_NOTICIAS}")
+        st.caption("⚠️ Sin GITHUB_TOKEN: descarte temporal")
+    st.caption(f"Ventana: {CUTOFF_HORAS}hs · Top {TOP_NOTICIAS}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  BANDEJA DE NOTICIAS
 # ══════════════════════════════════════════════════════════════════════════════
 if menu == "📥 Bandeja de Noticias":
     st.header("📥 Bandeja de Entrada de Noticias")
-    st.markdown(f"Las noticias frescas (últimas **{VENTANA_HORAS}hs**) entran a la lista. Las vas marcando como **leídas** y quedan archivadas para siempre. Lo de la madrugada queda destacado.")
+    st.markdown(f"Noticias frescas (últimas **{CUTOFF_HORAS}hs**). Marcalas como leídas y desaparecen para siempre. 🌙 Madrugada queda destacado.")
     reg = st.selectbox("Región:", list(RSS_FEEDS.keys()))
     ca, cb = st.columns(2)
     with ca:
         escanear = st.button("🔄 Buscar noticias nuevas", use_container_width=True)
     with cb:
-        limpiar = st.button("🧹 Limpiar viejas (+10hs)", use_container_width=True)
-    if not GITHUB_TOKEN or not GITHUB_REPO:
-        st.warning("⚠️ Sin GITHUB_TOKEN, el 'leído' no se guarda entre sesiones.")
-    if limpiar:
-        with st.spinner("Limpiando..."):
-            limpiar_inbox_viejas()
-        st.success("Inbox limpiado.")
+        ver_todo = st.button("👁️ Ver todo el inbox", use_container_width=True)
+
     if escanear:
         with st.spinner(f"Buscando en {reg}..."):
-            _, n_nuevas = escanear_y_actualizar_inbox(reg)
-        st.success(f"✅ {n_nuevas} noticias nuevas en la bandeja.")
-        st.rerun()
-
-    inbox = cargar_inbox()
-    if inbox.empty:
-        st.info("Bandeja vacía. Hacé clic en 'Buscar noticias nuevas'.")
-    else:
-        df_reg = inbox[(inbox["region"] == reg) & (inbox["descartada"] != True) & (inbox["descartada"] != "True")]
-        activas = []
-        for _, row in df_reg.iterrows():
-            fecha_raw = row["fecha_pub"]
-            # Manejar NaN, vacío, o fecha válida
-            if pd.isna(fecha_raw) or str(fecha_raw).strip() == "":
-                dt = None  # sin fecha → se muestra igual
-            else:
-                try:
-                    dt = datetime.fromisoformat(str(fecha_raw))
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    # Si tiene fecha pero está fuera de ventana, la salteamos
-                    if not es_dentro_ventana(dt):
-                        continue
-                except Exception:
-                    dt = None  # fecha rota → se muestra igual
-            activas.append({"id": row["id"], "titulo": row["titulo"], "link": row["link"], "dt": dt})
-        if not activas:
-            st.info(f"No hay noticias activas en {reg}. Buscá nuevas o probá otra región.")
+            # Usar feedparser.parse directo — igual que el original que funcionaba
+            crudas = obtener_noticias_crudas(RSS_FEEDS[reg], max_por_feed=10)
+            n_guardadas = 0
+            if GITHUB_TOKEN and GITHUB_REPO:
+                _, n_guardadas = guardar_en_inbox(reg, crudas)
+        if crudas:
+            # Guardar también en session_state para mostrar sin depender del GitHub
+            st.session_state[f"noticias_{reg}"] = crudas
+            st.session_state[f"noticias_{reg}_ts"] = datetime.now()
+            st.success(f"✅ {len(crudas)} noticias encontradas.")
         else:
-            with st.spinner("Ordenando por relevancia..."):
-                orden, _ = ia_curar_inbox(activas, REGION_CONTEXTO[reg])
-            indices = [i for i in orden if i < len(activas)]
-            for i in range(len(activas)):
-                if i not in indices:
-                    indices.append(i)
-            st.caption(f"📬 {len(activas)} noticias en la bandeja de {reg}")
-            st.divider()
-            for idx in indices:
-                n = activas[idx]
-                clase_tag, texto_tag, _ = etiqueta_tiempo(n["dt"])
-                clase_card = "news-card"
-                if clase_tag == "tag-nuevo":
-                    clase_card += " news-nuevo"
-                elif clase_tag == "tag-madrugada":
-                    clase_card += " news-madrugada"
-                claves = detectar_palabras_clave(n["titulo"])
-                alerta = " 🚨 " + ", ".join(claves).upper() if claves else ""
-                col_n, col_b = st.columns([5, 1])
-                with col_n:
-                    st.markdown(f"""<div class="{clase_card}">
-                        <span class="tag-tiempo {clase_tag}">{texto_tag}</span>{alerta}<br>
-                        <a href="{n['link']}" target="_blank" style="font-size:16px; font-weight:600;">{n['titulo']}</a>
-                    </div>""", unsafe_allow_html=True)
-                with col_b:
-                    if st.button("✓ Leída", key=f"d_{n['id']}", use_container_width=True):
-                        descartar_noticia(n["id"])
-                        st.rerun()
+            st.warning("No se encontraron noticias. Probá otra región.")
+
+    # Cargar noticias descartadas para ocultarlas
+    descartadas = set()
+    if GITHUB_TOKEN and GITHUB_REPO:
+        inbox_gh = cargar_inbox()
+        if not inbox_gh.empty:
+            mask = (inbox_gh["descartada"] == True) | (inbox_gh["descartada"] == "True")
+            descartadas = set(inbox_gh[mask]["id"].astype(str).tolist())
+
+    # Mostrar noticias del session_state (lo que trajo el último escaneo)
+    noticias_mostrar = st.session_state.get(f"noticias_{reg}", [])
+
+    if ver_todo and GITHUB_TOKEN and GITHUB_REPO:
+        # Cargar todo el inbox de GitHub para esta región
+        inbox_gh = cargar_inbox()
+        if not inbox_gh.empty:
+            df_reg = inbox_gh[
+                (inbox_gh["region"] == reg) &
+                (inbox_gh["descartada"] != True) &
+                (inbox_gh["descartada"] != "True")
+            ]
+            noticias_mostrar = df_reg.rename(columns={"titulo": "titulo", "link": "link", "fecha_pub": "fecha_pub"})[["titulo","link","fecha_pub"]].to_dict("records")
+
+    if noticias_mostrar:
+        # Ordenar por IA si hay API key
+        if ANTHROPIC_API_KEY and len(noticias_mostrar) > 1:
+            with st.spinner("Ordenando por relevancia política..."):
+                orden, _ = ia_curar_regional(noticias_mostrar, REGION_CONTEXTO[reg])
+        else:
+            orden = list(range(len(noticias_mostrar)))
+
+        indices = [i for i in orden if i < len(noticias_mostrar)]
+        for i in range(len(noticias_mostrar)):
+            if i not in indices:
+                indices.append(i)
+
+        st.caption(f"📬 {len(noticias_mostrar)} noticias en {reg}")
+        st.divider()
+
+        for idx in indices:
+            n = noticias_mostrar[idx]
+            nid = hash_noticia(n["titulo"])
+
+            # Saltar descartadas
+            if nid in descartadas:
+                continue
+
+            clase_tag, texto_tag = etiqueta_tiempo(n.get("fecha_pub",""))
+            clase_card = "news-card"
+            if clase_tag == "tag-nuevo":
+                clase_card += " news-nuevo"
+            elif clase_tag == "tag-madrugada":
+                clase_card += " news-madrugada"
+
+            claves = detectar_palabras_clave(n["titulo"])
+            alerta = " 🚨 " + ", ".join(claves).upper() if claves else ""
+
+            col_n, col_b = st.columns([5, 1])
+            with col_n:
+                st.markdown(f"""<div class="{clase_card}">
+                    <span class="tag {clase_tag}">{texto_tag}</span>{alerta}<br>
+                    <a href="{n['link']}" target="_blank" style="font-size:15px; font-weight:600;">{n['titulo']}</a>
+                </div>""", unsafe_allow_html=True)
+            with col_b:
+                if st.button("✓ Leída", key=f"leer_{nid}_{idx}", use_container_width=True):
+                    if GITHUB_TOKEN and GITHUB_REPO:
+                        descartar_noticia(nid)
+                    # Remover del session_state también
+                    noticias_act = st.session_state.get(f"noticias_{reg}", [])
+                    st.session_state[f"noticias_{reg}"] = [x for x in noticias_act if hash_noticia(x["titulo"]) != nid]
+                    st.rerun()
+    elif not escanear:
+        st.info("Seleccioná una región y hacé clic en 'Buscar noticias nuevas'.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TENDENCIAS
 # ══════════════════════════════════════════════════════════════════════════════
 elif menu == "🔥 Tendencias (Triple Respaldo)":
     st.header("🔥 Tendencias Virales de Argentina")
-    st.markdown("**Triple respaldo**: Trends24 → GetDayTrends → Búsqueda web IA. Si las 3 fallan, avisa — nunca inventa ni tira datos viejos.")
+    st.markdown("**Triple respaldo:** Trends24 → GetDayTrends → Búsqueda web IA. Nunca inventa.")
     if st.button("Escanear Tendencias Ahora", use_container_width=True):
         if not ANTHROPIC_API_KEY:
             st.error("Falta la API key de Anthropic.")
         else:
-            with st.spinner("Probando fuentes: Trends24 → GetDayTrends → Web IA"):
+            with st.spinner("Probando fuentes..."):
                 trends_raw, fuente = obtener_tendencias_con_respaldo()
             if not trends_raw:
-                st.error("❌ Las 3 fuentes fallaron. No hay datos ahora. Probá en unos minutos.")
+                st.error("❌ Las 3 fuentes fallaron. Probá en unos minutos.")
             else:
                 st.success(f"✅ Datos desde: **{fuente}**")
-                with st.spinner("Filtrando ruido y analizando ángulo político..."):
+                with st.spinner("Filtrando ruido político..."):
                     filtrados, err = ia_filtrar_tendencias(trends_raw, fuente)
                 c1, c2 = st.columns(2)
                 with c1:
@@ -631,7 +621,7 @@ elif menu == "🔥 Tendencias (Triple Respaldo)":
                     for t in trends_raw[:15]:
                         st.markdown(f"- {t}")
                 with c2:
-                    st.markdown("### 🤖 Curaduría Política IA")
+                    st.markdown("### 🤖 Curaduría Política")
                     if err or not filtrados:
                         st.info("Hoy la agenda viral es puro deporte/farándula.")
                     else:
@@ -649,16 +639,16 @@ elif menu == "🎯 Radar de Menciones":
     if st.button("Rastrear", use_container_width=True) and rival.strip():
         url = f"https://news.google.com/rss/search?q=%22{rival.replace(' ', '+')}%22&hl=es-419&gl=AR&ceid=AR:es"
         with st.spinner(f"Buscando sobre {rival}..."):
-            feed = leer_feed(url)
+            feed = feedparser.parse(url)
             items = []
             for entry in feed.entries[:15]:
-                items.append({"titulo": entry.get("title","").strip(), "link": entry.get("link","#"), "dt": parse_fecha(entry)})
+                items.append({"titulo": entry.get("title","").strip(), "link": entry.get("link","#"), "fecha_pub": entry.get("published","")})
         if not items:
             st.warning(f"No se encontraron menciones de {rival}.")
         else:
             st.caption(f"{len(items)} menciones")
             for n in items:
-                _, texto_tag, _ = etiqueta_tiempo(n["dt"])
+                _, texto_tag = etiqueta_tiempo(n["fecha_pub"])
                 st.markdown(f"🔸 [{n['titulo']}]({n['link']}) · *{texto_tag}*")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -668,48 +658,41 @@ elif menu == "🔮 Predicción y Agenda":
     st.header("🔮 Calendario de Agenda y Predicción")
     if st.button("Generar Calendario", use_container_width=True):
         if not ANTHROPIC_API_KEY:
-            st.error("Falta API key de Anthropic.")
+            st.error("Falta API key.")
         else:
             with st.spinner("Armando agenda..."):
-                urls_ctx = RSS_FEEDS["POLÍTICA NACIONAL"] + RSS_FEEDS["CABA y Rosca"]
-                noticias_ctx = []
-                for url in urls_ctx:
-                    try:
-                        feed = leer_feed(url)
-                        for e in feed.entries[:6]:
-                            noticias_ctx.append(e.get("title","").strip())
-                    except Exception:
-                        continue
-                contexto_texto = "\n".join([f"- {t}" for t in noticias_ctx if t])
-            if not contexto_texto:
+                noticias_ctx = obtener_noticias_crudas(
+                    RSS_FEEDS["POLÍTICA NACIONAL"] + RSS_FEEDS["CABA y Rosca"], max_por_feed=6)
+            contexto = "\n".join([f"- {n['titulo']}" for n in noticias_ctx])
+            if not contexto:
                 st.warning("No hay noticias frescas para la agenda.")
             else:
                 prompt = f"""Sos secretario de inteligencia política. Titulares de hoy:
-{contexto_texto}
+{contexto}
 TAREA 1: Detectá eventos futuros (sesiones, paros, marchas, debates).
 TAREA 2: Deducí 3 ejes de conflicto de la semana.
-Devolvé SOLO JSON sin markdown: {{"agenda_concreta": [{{"tiempo": "cuándo", "evento": "qué", "explicacion": "por qué importa"}}], "ejes_estrategicos": [{{"titulo": "eje", "conflicto": "qué pasa", "tip": "qué hacer"}}]}}"""
+Devolvé SOLO JSON: {{"agenda_concreta": [{{"tiempo":"cuándo","evento":"qué","explicacion":"por qué"}}], "ejes_estrategicos": [{{"titulo":"eje","conflicto":"qué pasa","tip":"qué hacer"}}]}}"""
                 try:
                     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
                     msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500,
                                                  messages=[{"role": "user", "content": prompt}])
                     data = extraer_json_seguro(msg.content[0].text)
-                    if not data:
-                        st.error("No se pudo interpretar la respuesta.")
-                    else:
+                    if data:
                         st.success("✅ Agenda generada.")
                         st.markdown("### 📅 Eventos Detectados")
                         for ev in data.get("agenda_concreta", []):
-                            st.markdown(f"""<div class="news-card">
+                            st.markdown(f"""<div class="evento-card">
                                 <span style='color:#e89a3c; font-weight:bold;'>🗓️ {ev.get('tiempo','').upper()}</span><br>
                                 <span style='font-size:17px; font-weight:bold;'>{ev.get('evento','')}</span><br>
-                                <span style='color:#555;'>📝 <i>{ev.get('explicacion','')}</i></span>
+                                <i style='color:#555;'>{ev.get('explicacion','')}</i>
                             </div>""", unsafe_allow_html=True)
                         st.markdown("### 🎯 Ejes de Conflicto")
                         for eje in data.get("ejes_estrategicos", []):
                             st.markdown(f"#### {eje.get('titulo','')}")
                             st.markdown(f"**💥 Conflicto:** {eje.get('conflicto','')}")
                             st.markdown(f"**💡 Tip:** {eje.get('tip','')}")
+                    else:
+                        st.error("No se pudo interpretar la respuesta.")
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
@@ -727,7 +710,7 @@ elif menu == "🤖 Evaluador de Contenido":
         else:
             with st.spinner("Analizando..."):
                 prompt = f"""Evaluá este texto político: "{t}".
-Devolvé SOLO JSON sin markdown: {{"score": 0-100, "veredicto": "frase", "fortalezas": ["f1","f2"], "mejoras": ["m1","m2"], "plataforma_ideal": "X / Instagram"}}"""
+SOLO JSON: {{"score":0-100,"veredicto":"frase","fortalezas":["f1","f2"],"mejoras":["m1","m2"],"plataforma_ideal":"X / Instagram"}}"""
                 try:
                     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
                     msg = client.messages.create(model="claude-sonnet-4-6", max_tokens=600,
@@ -739,15 +722,13 @@ Devolvé SOLO JSON sin markdown: {{"score": 0-100, "veredicto": "frase", "fortal
                         elif score >= 50: st.warning(f"⚠️ Score: {score}/100 — {data.get('veredicto','')}")
                         else: st.error(f"❌ Score: {score}/100 — {data.get('veredicto','')}")
                         st.info(f"📱 Plataforma ideal: {data.get('plataforma_ideal','')}")
-                        cc1, cc2 = st.columns(2)
-                        with cc1:
+                        c1, c2 = st.columns(2)
+                        with c1:
                             st.markdown("👍 **Fuertes:**")
                             for f in data.get("fortalezas", []): st.markdown(f"- {f}")
-                        with cc2:
+                        with c2:
                             st.markdown("🔧 **A mejorar:**")
                             for m in data.get("mejoras", []): st.markdown(f"- {m}")
-                    else:
-                        st.error("No se pudo procesar.")
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
@@ -756,9 +737,8 @@ Devolvé SOLO JSON sin markdown: {{"score": 0-100, "veredicto": "frase", "fortal
 # ══════════════════════════════════════════════════════════════════════════════
 elif menu == "🧠 Laboratorio de Audiencias":
     st.header("🧠 Laboratorio de Perfiles y Audiencias")
-    st.markdown("Memoria permanente: cargás un perfil y queda guardado. Actualizás mes a mes y ves la evolución.")
-    COLS_AUD = ["Fecha","Perfil","Cargo","Organización","Alianzas","Plataforma",
-                "Formato","Tema/Texto","Alcance","Interacciones","Engagement (%)"]
+    st.markdown("Memoria permanente: cargás una vez y queda. Vas actualizando mes a mes y ves la evolución.")
+    COLS_AUD = ["Fecha","Perfil","Cargo","Organización","Alianzas","Plataforma","Formato","Tema/Texto","Alcance","Interacciones","Engagement (%)"]
     df_aud, _ = cargar_csv_github(PATH_AUDIENCIA)
     if df_aud.empty:
         df_aud = pd.DataFrame(columns=COLS_AUD)
@@ -783,10 +763,8 @@ elif menu == "🧠 Laboratorio de Audiencias":
                 st.image(img_tw, caption="Captura cargada", use_container_width=True)
             tema_tw = st.text_area("✍️ Tema/Texto del tweet:", key="tw_tema", height=100)
             ca1, ca2 = st.columns(2)
-            with ca1:
-                alc_tw = st.number_input("Impresiones", min_value=0, value=0, key="tw_alc")
-            with ca2:
-                int_tw = st.number_input("Interacciones", min_value=0, value=0, key="tw_int")
+            with ca1: alc_tw = st.number_input("Impresiones", min_value=0, value=0, key="tw_alc")
+            with ca2: int_tw = st.number_input("Interacciones", min_value=0, value=0, key="tw_int")
         if st.button("💾 Guardar registro Twitter", use_container_width=True):
             if perfil_tw.strip() and alc_tw > 0 and tema_tw.strip():
                 eng = round((int_tw / alc_tw) * 100, 2)
@@ -796,7 +774,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
                          "Alcance": alc_tw, "Interacciones": int_tw, "Engagement (%)": eng}
                 df_aud = pd.concat([df_aud, pd.DataFrame([nuevo])], ignore_index=True)
                 ok, msg = guardar_csv_github(PATH_AUDIENCIA, df_aud, f"Registro TW {perfil_tw}")
-                if ok: st.success(f"✅ Guardado permanente. Engagement: {eng}%")
+                if ok: st.success(f"✅ Guardado. Engagement: {eng}%")
                 else: st.warning(f"Falló: {msg}")
             else:
                 st.error("Completá perfil, texto y alcance.")
@@ -816,10 +794,8 @@ elif menu == "🧠 Laboratorio de Audiencias":
             formato_ig = st.selectbox("📐 Formato:", ["Reel","Carrusel de fotos","Imagen fija","Historia"], key="ig_fmt")
             tema_ig = st.text_area("✍️ Tema/Descripción:", key="ig_tema", height=80)
             cb1, cb2 = st.columns(2)
-            with cb1:
-                alc_ig = st.number_input("Alcance", min_value=0, value=0, key="ig_alc")
-            with cb2:
-                int_ig = st.number_input("Interacciones", min_value=0, value=0, key="ig_int")
+            with cb1: alc_ig = st.number_input("Alcance", min_value=0, value=0, key="ig_alc")
+            with cb2: int_ig = st.number_input("Interacciones", min_value=0, value=0, key="ig_int")
         if st.button("💾 Guardar registro Instagram", use_container_width=True):
             if perfil_ig.strip() and alc_ig > 0 and tema_ig.strip():
                 eng = round((int_ig / alc_ig) * 100, 2)
@@ -829,7 +805,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
                          "Alcance": alc_ig, "Interacciones": int_ig, "Engagement (%)": eng}
                 df_aud = pd.concat([df_aud, pd.DataFrame([nuevo])], ignore_index=True)
                 ok, msg = guardar_csv_github(PATH_AUDIENCIA, df_aud, f"Registro IG {perfil_ig}")
-                if ok: st.success(f"✅ Guardado permanente. Engagement: {eng}%")
+                if ok: st.success(f"✅ Guardado. Engagement: {eng}%")
                 else: st.warning(f"Falló: {msg}")
             else:
                 st.error("Completá perfil, descripción y alcance.")
@@ -844,7 +820,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
             perfil_sel = st.selectbox("Perfil a analizar:", perfiles)
             if st.button("Generar Patrón de Rendimiento con IA", use_container_width=True):
                 if not ANTHROPIC_API_KEY:
-                    st.error("Falta API key de Anthropic.")
+                    st.error("Falta API key.")
                 else:
                     datos_p = df_aud[df_aud["Perfil"] == perfil_sel]
                     tw = datos_p[datos_p["Plataforma"] == "Twitter"]
@@ -881,11 +857,11 @@ elif menu == "🧠 Laboratorio de Audiencias":
                                     fig.update_layout(height=360, margin=dict(t=20,b=20,l=10,r=10))
                                     st.plotly_chart(fig, use_container_width=True)
                         except ImportError:
-                            st.warning("Agregá 'plotly' al requirements.txt para ver los gráficos.")
+                            st.warning("Agregá 'plotly' al requirements.txt.")
                         st.markdown(f"""<div class="insight-box">
                             <b>𝕏 Twitter:</b> {data.get('insight_twitter','')}<br><br>
                             <b>📸 Instagram:</b> {data.get('insight_instagram','')}<br><br>
-                            <b>🎯 Recomendación cruzada:</b> {data.get('recomendacion_general','')}<br><br>
+                            <b>🎯 Recomendación:</b> {data.get('recomendacion_general','')}<br><br>
                             <b>Actitud predominante:</b> {data.get('actitud_predominante','')}
                         </div>""", unsafe_allow_html=True)
         with st.expander("🗑️ Borrar todo el historial"):
@@ -894,7 +870,7 @@ elif menu == "🧠 Laboratorio de Audiencias":
                 st.success("Historial borrado.")
                 st.rerun()
     else:
-        st.info("Todavía no hay registros guardados. Cargá el primero arriba.")
+        st.info("Todavía no hay registros. Cargá el primero arriba.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ALERTAS Y REPORTES
@@ -903,35 +879,28 @@ elif menu == "📧 Alertas y Reportes":
     st.header("📧 Centro de Envíos y Alertas")
     st.markdown("### Escáner de Palabras Clave + Mail")
     st.caption("Palabras gatillo: " + ", ".join(PALABRAS_CLAVE))
-    if st.button("Escanear todas las regiones y enviar alertas", use_container_width=True):
+    if st.button("Escanear y enviar alertas por mail", use_container_width=True):
         if not GMAIL_APP_PASSWORD:
-            st.error("Falta la contraseña de Gmail en los Secrets.")
+            st.error("Falta contraseña de Gmail en los Secrets.")
         else:
             with st.spinner("Rastreando palabras clave..."):
                 alertas = []
                 for region, urls in RSS_FEEDS.items():
-                    for url in urls:
-                        try:
-                            feed = leer_feed(url)
-                            for e in feed.entries[:5]:
-                                titulo = e.get("title","").strip()
-                                if not es_dentro_ventana(parse_fecha(e)):
-                                    continue
-                                claves = detectar_palabras_clave(titulo)
-                                if claves:
-                                    alertas.append((titulo, e.get("link","#"), claves))
-                        except Exception:
-                            continue
+                    noticias = obtener_noticias_crudas(urls, max_por_feed=5)
+                    for n in noticias:
+                        claves = detectar_palabras_clave(n["titulo"])
+                        if claves:
+                            alertas.append((n["titulo"], n["link"], claves))
             seen, unicas = set(), []
             for a in alertas:
                 if a[0] not in seen:
                     seen.add(a[0]); unicas.append(a)
             if not unicas:
-                st.info("No se detectaron palabras clave en las últimas horas.")
+                st.info("No se detectaron palabras clave.")
             else:
-                html = "<h2>🚨 Alertas Detectadas</h2>" + "".join(
-                    [f"<p><b><a href='{l}'>{t}</a></b> <span style='color:#D32F2F'>[{', '.join(c).upper()}]</span></p>" for t,l,c in unicas])
-                ok, msg = enviar_mail(f"🚨 {len(unicas)} Alertas de Monitoreo", html)
+                html = "<h2>🚨 Alertas</h2>" + "".join(
+                    [f"<p><b><a href='{l}'>{t}</a></b> [{', '.join(c).upper()}]</p>" for t,l,c in unicas])
+                ok, msg = enviar_mail(f"🚨 {len(unicas)} Alertas", html)
                 if ok:
                     st.success(f"✅ {len(unicas)} alertas enviadas a {MAIL_DESTINO}")
                     for t,l,c in unicas:
@@ -939,4 +908,4 @@ elif menu == "📧 Alertas y Reportes":
                 else:
                     st.error(f"❌ {msg}")
     st.divider()
-    st.info("""**Próximo paso (otra sesión):** un bot que corra solo cada 15 min en un servidor externo y te avise por Telegram o Mail cuando salte una palabra clave, sin que nadie abra la app.""")
+    st.info("**Próxima sesión:** bot automático con Telegram que manda alertas aunque nadie esté mirando la app.")
